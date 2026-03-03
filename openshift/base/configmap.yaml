@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fkm-config
+  namespace: fkm-test
+  labels:
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+data:
+  # ── MinIO / S3 ──────────────────────────────────────────────────────
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_BUCKET: "raw-data"
+  MINIO_SECURE: "false"
+  MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────
+  PG_HOST: "postgres"
+  PG_PORT: "5432"
+  PG_DATABASE: "warehouse"
+  POSTGRES_DB: "warehouse"
+
+  # ── Redis ───────────────────────────────────────────────────────────
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+
+  # ── MLflow ──────────────────────────────────────────────────────────
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
+  MLFLOW_EXPERIMENT_NAME: "customer_churn"
+
+  # ── Feast ───────────────────────────────────────────────────────────
+  FEAST_REPO_PATH: "/app/src/feature_store"
+
+  # ── App ─────────────────────────────────────────────────────────────
+  MODEL_NAME: "customer_churn_model"
+  RAW_CSV_OBJECT: "customers.csv"
+  MODEL_ROC_AUC_THRESHOLD: "0.70"
+  WAREHOUSE_TABLE: "customer_features"

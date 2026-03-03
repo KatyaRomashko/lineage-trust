@@ -1,0 +1,93 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: fkm-test
+  labels:
+    app: mlflow
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: registry.access.redhat.com/ubi9:latest
+          command:
+            - bash
+            - -c
+            - |
+              echo "Waiting for postgres:5432 ..."
+              until bash -c "echo > /dev/tcp/postgres/5432" 2>/dev/null; do sleep 2; done
+              echo "PostgreSQL is up"
+        - name: wait-for-minio
+          image: registry.access.redhat.com/ubi9:latest
+          command:
+            - bash
+            - -c
+            - |
+              echo "Waiting for minio:9000 ..."
+              until bash -c "echo > /dev/tcp/minio/9000" 2>/dev/null; do sleep 2; done
+              echo "MinIO is up"
+      containers:
+        - name: mlflow
+          image: image-registry.openshift-image-registry.svc:5000/fkm-test/mlflow-server:latest
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: fkm-config
+            - secretRef:
+                name: fkm-credentials
+          command:
+            - mlflow
+            - server
+            - --backend-store-uri
+            - postgresql://feast:feast@postgres:5432/warehouse
+            - --default-artifact-root
+            - s3://mlflow-artifacts/
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "5000"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: fkm-test
+  labels:
+    app: mlflow
+spec:
+  selector:
+    app: mlflow
+  ports:
+    - port: 5000
+      targetPort: 5000

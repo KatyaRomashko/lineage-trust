@@ -1,0 +1,581 @@
+# PIPELINE DEFINITION
+# Name: customer-churn-ml-pipeline
+# Description: End-to-end: Feast extraction, Validation, Feature engineering, XGBoost training, Evaluation, MLflow registration
+# Inputs:
+#    aws_key: str [Default: 'minioadmin']
+#    aws_secret: str [Default: 'minioadmin']
+#    experiment_name: str [Default: 'customer_churn']
+#    feast_repo_path: str [Default: '/app/src/feature_store']
+#    model_name: str [Default: 'customer_churn_model']
+#    pg_host: str [Default: 'postgres.fkm-test.svc.cluster.local']
+#    pg_url: str [Default: 'postgresql://feast:feast@postgres.fkm-test.svc.cluster.local:5432/warehouse']
+#    redis_host: str [Default: 'redis.fkm-test.svc.cluster.local']
+#    roc_auc_threshold: float [Default: 0.7]
+#    s3_endpoint: str [Default: 'http://minio.fkm-test.svc.cluster.local:9000']
+#    table_name: str [Default: 'customer_features']
+#    tracking_uri: str [Default: 'http://mlflow.fkm-test.svc.cluster.local:5000']
+components:
+  comp-step1-data-extraction:
+    executorLabel: exec-step1-data-extraction
+    inputDefinitions:
+      parameters:
+        feast_repo_path:
+          parameterType: STRING
+        pg_host:
+          parameterType: STRING
+        pg_url:
+          parameterType: STRING
+        redis_host:
+          parameterType: STRING
+        table_name:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_path:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-step2-data-validation:
+    executorLabel: exec-step2-data-validation
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        output_path:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-step3-feature-engineering:
+    executorLabel: exec-step3-feature-engineering
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        output_path:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-step4-model-training:
+    executorLabel: exec-step4-model-training
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        aws_key:
+          parameterType: STRING
+        aws_secret:
+          parameterType: STRING
+        experiment_name:
+          parameterType: STRING
+        s3_endpoint:
+          parameterType: STRING
+        tracking_uri:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-step5-evaluation:
+    executorLabel: exec-step5-evaluation
+    inputDefinitions:
+      parameters:
+        train_result_json:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-step6-model-registration:
+    executorLabel: exec-step6-model-registration
+    inputDefinitions:
+      parameters:
+        aws_key:
+          parameterType: STRING
+        aws_secret:
+          parameterType: STRING
+        metrics_json:
+          parameterType: STRING
+        model_name:
+          parameterType: STRING
+        roc_auc_threshold:
+          parameterType: NUMBER_DOUBLE
+        s3_endpoint:
+          parameterType: STRING
+        tracking_uri:
+          parameterType: STRING
+        train_result_json:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-step1-data-extraction:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - step1_data_extraction
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef step1_data_extraction(\n    pg_url: str,\n    feast_repo_path:\
+          \ str,\n    table_name: str,\n    pg_host: str,\n    redis_host: str,\n\
+          \    output_path: dsl.Output[dsl.Dataset],\n) -> None:\n    \"\"\"Retrieve\
+          \ historical features from Feast and save as parquet.\"\"\"\n    import\
+          \ os\n    import pandas as pd\n    from sqlalchemy import create_engine,\
+          \ text\n    from feast import FeatureStore\n\n    # Patch feature_store.yaml\
+          \ so Feast points at in-cluster services\n    fs_yaml = os.path.join(feast_repo_path,\
+          \ \"feature_store.yaml\")\n    with open(fs_yaml, \"w\") as f:\n       \
+          \ f.write(f\"\"\"\\\nproject: customer_churn\nprovider: local\nregistry:\n\
+          \  registry_type: sql\n  path: postgresql://feast:feast@{pg_host}:5432/warehouse\n\
+          \  cache_ttl_seconds: 60\noffline_store:\n  type: postgres\n  host: {pg_host}\n\
+          \  port: 5432\n  database: warehouse\n  db_schema: public\n  user: feast\n\
+          \  password: feast\nonline_store:\n  type: redis\n  connection_string: {redis_host}:6379\n\
+          entity_key_serialization_version: 2\n\"\"\")\n    print(f\"Patched {fs_yaml}\
+          \ -> pg={pg_host}, redis={redis_host}\")\n\n    engine = create_engine(pg_url)\n\
+          \    with engine.connect() as conn:\n        entity_df = pd.read_sql(\n\
+          \            text(f\"SELECT entity_id, event_timestamp, churn FROM {table_name}\"\
+          ),\n            conn,\n        )\n    engine.dispose()\n    entity_df[\"\
+          event_timestamp\"] = pd.to_datetime(\n        entity_df[\"event_timestamp\"\
+          ], utc=True,\n    )\n\n    store = FeatureStore(repo_path=feast_repo_path)\n\
+          \    features = [\n        \"customer_features_view:tenure_months\",\n \
+          \       \"customer_features_view:monthly_charges\",\n        \"customer_features_view:total_charges\"\
+          ,\n        \"customer_features_view:num_support_tickets\",\n        \"customer_features_view:contract_type\"\
+          ,\n        \"customer_features_view:internet_service\",\n        \"customer_features_view:payment_method\"\
+          ,\n    ]\n    features_df = store.get_historical_features(\n        entity_df=entity_df[[\"\
+          entity_id\", \"event_timestamp\"]],\n        features=features,\n    ).to_df()\n\
+          \n    for df_ in (features_df, entity_df):\n        df_[\"event_timestamp\"\
+          ] = pd.to_datetime(\n            df_[\"event_timestamp\"], utc=True,\n \
+          \       )\n\n    result = features_df.merge(\n        entity_df[[\"entity_id\"\
+          , \"event_timestamp\", \"churn\"]],\n        on=[\"entity_id\", \"event_timestamp\"\
+          ],\n        how=\"left\",\n    )\n    print(f\"Step 1 complete - shape {result.shape}\"\
+          )\n    result.to_parquet(output_path.path)\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/fkm-test/fkm-app:latest
+    exec-step2-data-validation:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - step2_data_validation
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef step2_data_validation(\n    dataset: dsl.Input[dsl.Dataset],\n\
+          \    output_path: dsl.Output[dsl.Dataset],\n) -> None:\n    \"\"\"Validate\
+          \ schema, nulls, distributions.\"\"\"\n    import numpy as np\n    import\
+          \ pandas as pd\n\n    df = pd.read_parquet(dataset.path)\n\n    critical_cols\
+          \ = [\n        \"entity_id\", \"event_timestamp\", \"tenure_months\",\n\
+          \        \"monthly_charges\", \"total_charges\", \"num_support_tickets\"\
+          , \"churn\",\n    ]\n    for col in critical_cols:\n        nulls = df[col].isna().sum()\n\
+          \        if nulls > 0:\n            print(f\"  Filling {nulls} nulls in\
+          \ {col}\")\n            df[col] = df[col].fillna(0)\n\n    numeric_cols\
+          \ = df.select_dtypes(include=[np.number]).columns\n    for col in numeric_cols:\n\
+          \        if df[col].nunique() <= 1:\n            print(f\"  WARNING: {col}\
+          \ is constant\")\n\n    print(f\"Step 2 complete \u2013 {len(df)} rows validated\"\
+          )\n    df.to_parquet(output_path.path)\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/fkm-test/fkm-app:latest
+    exec-step3-feature-engineering:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - step3_feature_engineering
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef step3_feature_engineering(\n    dataset: dsl.Input[dsl.Dataset],\n\
+          \    output_path: dsl.Output[dsl.Dataset],\n) -> None:\n    \"\"\"Add derived\
+          \ features.\"\"\"\n    import numpy as np\n    import pandas as pd\n\n \
+          \   df = pd.read_parquet(dataset.path)\n    tenure_safe = df[\"tenure_months\"\
+          ].replace(0, 1)\n    df[\"charges_per_month\"] = df[\"total_charges\"] /\
+          \ tenure_safe\n    df[\"ticket_rate\"] = df[\"num_support_tickets\"] / tenure_safe\n\
+          \n    for col in [\"charges_per_month\", \"ticket_rate\"]:\n        df[col]\
+          \ = df[col].replace([np.inf, -np.inf], 0.0)\n\n    print(f\"Step 3 complete\
+          \ \u2013 shape {df.shape}\")\n    df.to_parquet(output_path.path)\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/fkm-test/fkm-app:latest
+    exec-step4-model-training:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - step4_model_training
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef step4_model_training(\n    dataset: dsl.Input[dsl.Dataset],\n\
+          \    tracking_uri: str,\n    experiment_name: str,\n    s3_endpoint: str,\n\
+          \    aws_key: str,\n    aws_secret: str,\n) -> str:\n    \"\"\"Train XGBoost,\
+          \ log to MLflow. Returns JSON with run_id, model_uri, metrics.\"\"\"\n \
+          \   import json\n    import os\n\n    import mlflow\n    import mlflow.sklearn\n\
+          \    import numpy as np\n    import pandas as pd\n    import xgboost as\
+          \ xgb\n    from sklearn.metrics import (\n        f1_score, precision_score,\
+          \ recall_score, roc_auc_score,\n    )\n    from sklearn.model_selection\
+          \ import train_test_split\n    from sklearn.preprocessing import LabelEncoder\n\
+          \n    os.environ[\"MLFLOW_S3_ENDPOINT_URL\"] = s3_endpoint\n    os.environ[\"\
+          AWS_ACCESS_KEY_ID\"] = aws_key\n    os.environ[\"AWS_SECRET_ACCESS_KEY\"\
+          ] = aws_secret\n\n    df = pd.read_parquet(dataset.path)\n\n    cat_cols\
+          \ = [\"contract_type\", \"internet_service\", \"payment_method\"]\n    for\
+          \ col in cat_cols:\n        df[col] = LabelEncoder().fit_transform(df[col].astype(str))\n\
+          \n    feature_cols = [\n        \"tenure_months\", \"monthly_charges\",\
+          \ \"total_charges\",\n        \"num_support_tickets\", \"contract_type\"\
+          , \"internet_service\",\n        \"payment_method\",\n    ]\n    X = df[feature_cols].values.astype(np.float32)\n\
+          \    y = df[\"churn\"].values.astype(np.int32)\n\n    X_train, X_test, y_train,\
+          \ y_test = train_test_split(\n        X, y, test_size=0.2, random_state=42,\
+          \ stratify=y,\n    )\n\n    params = {\n        \"max_depth\": 6,\n    \
+          \    \"learning_rate\": 0.1,\n        \"n_estimators\": 200,\n        \"\
+          objective\": \"binary:logistic\",\n        \"eval_metric\": \"logloss\"\
+          ,\n        \"seed\": 42,\n    }\n\n    mlflow.set_tracking_uri(tracking_uri)\n\
+          \    mlflow.set_experiment(experiment_name)\n\n    with mlflow.start_run()\
+          \ as run:\n        mlflow.log_params(params)\n\n        model = xgb.XGBClassifier(**params)\n\
+          \        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)\n\
+          \n        y_pred = model.predict(X_test)\n        y_prob = model.predict_proba(X_test)[:,\
+          \ 1]\n\n        metrics = {\n            \"roc_auc\": float(roc_auc_score(y_test,\
+          \ y_prob)),\n            \"f1\": float(f1_score(y_test, y_pred)),\n    \
+          \        \"precision\": float(precision_score(y_test, y_pred)),\n      \
+          \      \"recall\": float(recall_score(y_test, y_pred)),\n        }\n   \
+          \     mlflow.log_metrics(metrics)\n\n        info = mlflow.sklearn.log_model(model,\
+          \ artifact_path=\"model\")\n\n        print(f\"Step 4 complete \u2013 metrics:\
+          \ {metrics}\")\n        return json.dumps({\n            \"run_id\": run.info.run_id,\n\
+          \            \"model_uri\": info.model_uri,\n            \"metrics\": metrics,\n\
+          \        })\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/fkm-test/fkm-app:latest
+    exec-step5-evaluation:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - step5_evaluation
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef step5_evaluation(train_result_json: str) -> str:\n    \"\"\"\
+          Display and return evaluation metrics.\"\"\"\n    import json\n\n    result\
+          \ = json.loads(train_result_json)\n    m = result[\"metrics\"]\n    print(\n\
+          \        f\"Step 5  ROC-AUC={m['roc_auc']:.4f}  F1={m['f1']:.4f}  \"\n \
+          \       f\"Precision={m['precision']:.4f}  Recall={m['recall']:.4f}\"\n\
+          \    )\n    return json.dumps(m)\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/fkm-test/fkm-app:latest
+    exec-step6-model-registration:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - step6_model_registration
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef step6_model_registration(\n    train_result_json: str,\n    metrics_json:\
+          \ str,\n    model_name: str,\n    tracking_uri: str,\n    s3_endpoint: str,\n\
+          \    aws_key: str,\n    aws_secret: str,\n    roc_auc_threshold: float,\n\
+          ) -> str:\n    \"\"\"Register model in MLflow if metrics beat the threshold.\"\
+          \"\"\n    import json\n    import os\n\n    import mlflow\n    from mlflow.tracking\
+          \ import MlflowClient\n\n    os.environ[\"MLFLOW_S3_ENDPOINT_URL\"] = s3_endpoint\n\
+          \    os.environ[\"AWS_ACCESS_KEY_ID\"] = aws_key\n    os.environ[\"AWS_SECRET_ACCESS_KEY\"\
+          ] = aws_secret\n\n    result = json.loads(train_result_json)\n    metrics\
+          \ = json.loads(metrics_json)\n\n    if metrics[\"roc_auc\"] < roc_auc_threshold:\n\
+          \        print(f\"Step 6  ROC-AUC {metrics['roc_auc']:.4f} < {roc_auc_threshold}\
+          \ \u2013 skipping\")\n        return json.dumps({\"registered\": False,\
+          \ \"reason\": \"below_threshold\"})\n\n    mlflow.set_tracking_uri(tracking_uri)\n\
+          \    mv = mlflow.register_model(model_uri=result[\"model_uri\"], name=model_name)\n\
+          \    client = MlflowClient()\n    client.set_registered_model_alias(model_name,\
+          \ \"champion\", str(mv.version))\n\n    print(f\"Step 6  Registered {model_name}\
+          \ v{mv.version} as alias 'champion'\")\n    return json.dumps({\n      \
+          \  \"registered\": True,\n        \"model_name\": model_name,\n        \"\
+          version\": int(mv.version),\n        \"alias\": \"champion\",\n    })\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/fkm-test/fkm-app:latest
+pipelineInfo:
+  description: 'End-to-end: Feast extraction, Validation, Feature engineering, XGBoost
+    training, Evaluation, MLflow registration'
+  name: customer-churn-ml-pipeline
+root:
+  dag:
+    tasks:
+      step1-data-extraction:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-step1-data-extraction
+        inputs:
+          parameters:
+            feast_repo_path:
+              componentInputParameter: feast_repo_path
+            pg_host:
+              componentInputParameter: pg_host
+            pg_url:
+              componentInputParameter: pg_url
+            redis_host:
+              componentInputParameter: redis_host
+            table_name:
+              componentInputParameter: table_name
+        taskInfo:
+          name: step1-data-extraction
+      step2-data-validation:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-step2-data-validation
+        dependentTasks:
+        - step1-data-extraction
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_path
+                producerTask: step1-data-extraction
+        taskInfo:
+          name: step2-data-validation
+      step3-feature-engineering:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-step3-feature-engineering
+        dependentTasks:
+        - step2-data-validation
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_path
+                producerTask: step2-data-validation
+        taskInfo:
+          name: step3-feature-engineering
+      step4-model-training:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-step4-model-training
+        dependentTasks:
+        - step3-feature-engineering
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_path
+                producerTask: step3-feature-engineering
+          parameters:
+            aws_key:
+              componentInputParameter: aws_key
+            aws_secret:
+              componentInputParameter: aws_secret
+            experiment_name:
+              componentInputParameter: experiment_name
+            s3_endpoint:
+              componentInputParameter: s3_endpoint
+            tracking_uri:
+              componentInputParameter: tracking_uri
+        taskInfo:
+          name: step4-model-training
+      step5-evaluation:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-step5-evaluation
+        dependentTasks:
+        - step4-model-training
+        inputs:
+          parameters:
+            train_result_json:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: step4-model-training
+        taskInfo:
+          name: step5-evaluation
+      step6-model-registration:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-step6-model-registration
+        dependentTasks:
+        - step4-model-training
+        - step5-evaluation
+        inputs:
+          parameters:
+            aws_key:
+              componentInputParameter: aws_key
+            aws_secret:
+              componentInputParameter: aws_secret
+            metrics_json:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: step5-evaluation
+            model_name:
+              componentInputParameter: model_name
+            roc_auc_threshold:
+              componentInputParameter: roc_auc_threshold
+            s3_endpoint:
+              componentInputParameter: s3_endpoint
+            tracking_uri:
+              componentInputParameter: tracking_uri
+            train_result_json:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: step4-model-training
+        taskInfo:
+          name: step6-model-registration
+  inputDefinitions:
+    parameters:
+      aws_key:
+        defaultValue: minioadmin
+        isOptional: true
+        parameterType: STRING
+      aws_secret:
+        defaultValue: minioadmin
+        isOptional: true
+        parameterType: STRING
+      experiment_name:
+        defaultValue: customer_churn
+        isOptional: true
+        parameterType: STRING
+      feast_repo_path:
+        defaultValue: /app/src/feature_store
+        isOptional: true
+        parameterType: STRING
+      model_name:
+        defaultValue: customer_churn_model
+        isOptional: true
+        parameterType: STRING
+      pg_host:
+        defaultValue: postgres.fkm-test.svc.cluster.local
+        isOptional: true
+        parameterType: STRING
+      pg_url:
+        defaultValue: postgresql://feast:feast@postgres.fkm-test.svc.cluster.local:5432/warehouse
+        isOptional: true
+        parameterType: STRING
+      redis_host:
+        defaultValue: redis.fkm-test.svc.cluster.local
+        isOptional: true
+        parameterType: STRING
+      roc_auc_threshold:
+        defaultValue: 0.7
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      s3_endpoint:
+        defaultValue: http://minio.fkm-test.svc.cluster.local:9000
+        isOptional: true
+        parameterType: STRING
+      table_name:
+        defaultValue: customer_features
+        isOptional: true
+        parameterType: STRING
+      tracking_uri:
+        defaultValue: http://mlflow.fkm-test.svc.cluster.local:5000
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.0

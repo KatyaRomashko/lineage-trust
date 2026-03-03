@@ -1,0 +1,33 @@
+# Core
+pandas>=2.2.0,<3
+numpy>=1.26.0,<2
+scikit-learn>=1.4.0,<2
+xgboost>=2.0.0,<3
+sqlalchemy>=2.0.0,<3
+psycopg2-binary>=2.9.9,<3
+
+# MinIO / S3
+minio>=7.2.0,<8
+boto3>=1.34.0,<2
+
+# Feast
+feast[postgres,redis]>=0.38.0,<1
+
+# MLflow
+mlflow>=2.12.0,<3
+
+# Kubeflow Pipelines
+kfp>=2.7.0,<3
+
+# Serving
+fastapi>=0.110.0,<1
+uvicorn>=0.29.0,<1
+pydantic>=2.6.0,<3
+httpx>=0.27.0,<1
+
+# Validation
+great-expectations>=0.18.0,<1
+
+# Utilities
+python-dotenv>=1.0.0,<2
+PyYAML>=6.0,<7

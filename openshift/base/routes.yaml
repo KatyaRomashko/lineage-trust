@@ -1,0 +1,59 @@
+---
+# Expose the FastAPI inference API externally
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: inference-api
+  namespace: fkm-test
+  labels:
+    app: inference-api
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+spec:
+  to:
+    kind: Service
+    name: inference-api
+  port:
+    targetPort: 8000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+---
+# Expose the MLflow UI externally
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mlflow
+  namespace: fkm-test
+  labels:
+    app: mlflow
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+spec:
+  to:
+    kind: Service
+    name: mlflow
+  port:
+    targetPort: 5000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+---
+# Expose MinIO console externally
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minio-console
+  namespace: fkm-test
+  labels:
+    app: minio
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+spec:
+  to:
+    kind: Service
+    name: minio
+  port:
+    targetPort: 9001
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
