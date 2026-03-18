@@ -13,6 +13,7 @@ import logging
 import os
 
 import mlflow
+import mlflow.data
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
@@ -114,8 +115,13 @@ def train_and_log(
         default_params.update(params)
 
     with mlflow.start_run() as run:
+        dataset_source = os.getenv(
+            "DATASET_SOURCE_URI",
+            f"postgresql://{os.getenv('PG_HOST', 'localhost')}:{os.getenv('PG_PORT', '5432')}"
+            f"/{os.getenv('PG_DATABASE', 'warehouse')}.public.customer_features",
+        )
         train_dataset = mlflow.data.from_pandas(
-            df, name="customer_features_view",
+            df, source=dataset_source, name="customer_features_view",
         )
         mlflow.log_input(train_dataset, context="training")
 

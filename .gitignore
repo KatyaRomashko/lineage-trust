@@ -14,5 +14,7 @@ venv/
 !openshift/**/*.yaml
 !kind/**/*.yaml
 !kind/*.yaml
+!local-kind/*.yaml
+!dataset-registry/**/*.yaml
 data/registry.db
 .ipynb_checkpoints/
