@@ -1,28 +1,16 @@
 """
 Spark ETL  –  MinIO (CSV) -> Transform -> PostgreSQL
 
-Uses PySpark with the OpenLineage Spark listener for automatic lineage,
-plus a bridge event to connect Spark's JDBC-derived dataset names to the
-Feast namespace so they form one continuous chain in Marquez.
+Uses PySpark with the OpenLineage Spark listener for automatic lineage.
+The listener reads OPENLINEAGE_URL and OPENLINEAGE_NAMESPACE from the
+environment (injected by the Argo workflow controller on OpenShift).
 """
 
-import json
 import os
-import sys
-from datetime import datetime, timezone
-from urllib.request import Request, urlopen
-from uuid import uuid4
 
 from pyspark.sql import SparkSession, Window
 from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    DoubleType,
-    IntegerType,
-    StringType,
-    StructField,
-    StructType,
-    TimestampType,
-)
+from pyspark.sql.types import DoubleType, IntegerType
 
 NUMERIC_COLS = [
     "tenure_months",
@@ -45,17 +33,16 @@ PG_DATABASE = os.getenv("PG_DATABASE", "warehouse")
 WAREHOUSE_TABLE = os.getenv("WAREHOUSE_TABLE", "customer_features")
 
 OPENLINEAGE_URL = os.getenv("OPENLINEAGE_URL", "http://marquez")
-OPENLINEAGE_NAMESPACE = os.getenv("OPENLINEAGE_NAMESPACE", "churn-demo/customer_churn")
+OPENLINEAGE_NAMESPACE = os.getenv("OPENLINEAGE_NAMESPACE", "spark-etl")
 
 
 def create_spark_session() -> SparkSession:
-    pg_jdbc_url = f"jdbc:postgresql://{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
-
     return (
         SparkSession.builder
         .master("local[*]")
         .appName("churn_etl")
-        .config("spark.jars", "/opt/spark/jars/postgresql.jar")
+        .config("spark.jars", "/opt/spark/jars/postgresql.jar,/opt/spark/jars/openlineage-spark.jar")
+        .config("spark.driver.extraClassPath", "/opt/spark/jars/openlineage-spark.jar:/opt/spark/jars/postgresql.jar")
         .config("spark.hadoop.fs.s3a.endpoint", f"http://{MINIO_ENDPOINT}")
         .config("spark.hadoop.fs.s3a.access.key", AWS_ACCESS_KEY)
         .config("spark.hadoop.fs.s3a.secret.key", AWS_SECRET_KEY)
@@ -63,6 +50,13 @@ def create_spark_session() -> SparkSession:
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
         .config("spark.driver.memory", "1g")
+        # OpenLineage native integration
+        .config("spark.extraListeners", "io.openlineage.spark.agent.OpenLineageSparkListener")
+        .config("spark.openlineage.transport.type", "http")
+        .config("spark.openlineage.transport.url", OPENLINEAGE_URL)
+        .config("spark.openlineage.namespace", OPENLINEAGE_NAMESPACE)
+        # Normalise s3a:// to s3:// so dataset URIs match other tools
+        .config("spark.openlineage.transport.urlParams.replaceDatasetNamespacePattern", "s3a://->s3://")
         .getOrCreate()
     )
 
@@ -127,54 +121,6 @@ def load(df: "DataFrame") -> None:
     print("Load complete")
 
 
-def emit_bridge_event():
-    """Emit an OpenLineage event that connects the Spark output dataset
-    (auto-named by the JDBC URL) to the Feast namespace so the lineage
-    chain is continuous in Marquez: CSV -> spark_etl -> customer_features_source."""
-    run_id = str(uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-
-    for event_type in ("START", "COMPLETE"):
-        event = {
-            "eventType": event_type,
-            "eventTime": now,
-            "run": {"runId": run_id, "facets": {}},
-            "job": {
-                "namespace": OPENLINEAGE_NAMESPACE,
-                "name": "spark_etl",
-                "facets": {},
-            },
-            "inputs": [
-                {
-                    "namespace": f"s3://{MINIO_BUCKET}",
-                    "name": RAW_CSV_OBJECT,
-                    "facets": {},
-                }
-            ],
-            "outputs": [
-                {
-                    "namespace": OPENLINEAGE_NAMESPACE,
-                    "name": "customer_features_source",
-                    "facets": {},
-                }
-            ],
-            "producer": "https://github.com/practice-mlops/spark-etl",
-            "schemaURL": "https://openlineage.io/spec/2-0-2/OpenLineage.json#/$defs/RunEvent",
-        }
-        body = json.dumps(event).encode("utf-8")
-        req = Request(
-            f"{OPENLINEAGE_URL}/api/v1/lineage",
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urlopen(req) as resp:
-                print(f"Bridge event {event_type}: HTTP {resp.status}")
-        except Exception as e:
-            print(f"Bridge event {event_type} failed: {e}")
-
-
 def main():
     print("=== SPARK ETL START ===")
     spark = create_spark_session()
@@ -185,9 +131,6 @@ def main():
         print("=== SPARK ETL COMPLETE ===")
     finally:
         spark.stop()
-
-    emit_bridge_event()
-    print("=== BRIDGE LINEAGE EMITTED ===")
 
 
 if __name__ == "__main__":

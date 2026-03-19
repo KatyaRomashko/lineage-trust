@@ -369,7 +369,7 @@ def ds_model_training(
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run() as run:
-        dataset_source = f"postgresql://{pg_host}:5432/{pg_database}.public.customer_features"
+        dataset_source = f"postgresql://{pg_host}:5432/{pg_database}.customer_features"
         train_dataset = mlflow.data.from_pandas(
             df, source=URIDatasetSource(dataset_source), name="customer_features_view",
         )
