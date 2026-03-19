@@ -88,6 +88,20 @@ create_cluster() {
   kubectl cluster-info --context "kind-${CLUSTER_NAME}"
 }
 
+# ── Podman image fix ──────────────────────────────────────────
+# Podman loads images into Kind's containerd with a localhost/ prefix,
+# but Kubernetes resolves bare names like "fkm-app:latest" to
+# "docker.io/library/fkm-app:latest". Re-tag inside the node so both
+# runtimes work transparently.
+retag_if_podman() {
+  local image="$1"
+  if [[ "${CONTAINER_RT}" == "podman" ]]; then
+    local node="${CLUSTER_NAME}-control-plane"
+    log "Re-tagging localhost/${image} → docker.io/library/${image} (Podman fix)"
+    podman exec "$node" ctr -n k8s.io images tag "localhost/${image}" "docker.io/library/${image}" 2>/dev/null || true
+  fi
+}
+
 # ── Build & load images ───────────────────────────────────────
 build_and_load_images() {
   header "Building app images"
@@ -105,10 +119,12 @@ build_and_load_images() {
   header "Loading images into Kind cluster"
   log "Loading fkm-app:latest ..."
   kind load docker-image fkm-app:latest --name "$CLUSTER_NAME"
+  retag_if_podman "fkm-app:latest"
   ok "fkm-app:latest loaded"
 
   log "Loading spark-etl:latest ..."
   kind load docker-image spark-etl:latest --name "$CLUSTER_NAME"
+  retag_if_podman "spark-etl:latest"
   ok "spark-etl:latest loaded"
 }
 
@@ -136,7 +152,9 @@ build_and_load_registry_images() {
 
   log "Loading registry images into Kind ..."
   kind load docker-image dataset-registry-api:local --name "$CLUSTER_NAME"
+  retag_if_podman "dataset-registry-api:local"
   kind load docker-image dataset-registry-ui:local --name "$CLUSTER_NAME"
+  retag_if_podman "dataset-registry-ui:local"
   ok "Registry images loaded"
 }
 
