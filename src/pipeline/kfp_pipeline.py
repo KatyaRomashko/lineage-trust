@@ -195,9 +195,12 @@ def ds_data_extraction(
 ) -> None:
     """Retrieve historical features from Feast and save as parquet."""
     import os
+    from urllib.parse import urlparse
+
     import pandas as pd
     from sqlalchemy import create_engine, text
     from feast import FeatureStore
+    from openlineage_sdk import OLClient, Dataset
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     fs_yaml = os.path.join(feast_repo_path, "feature_store.yaml")
@@ -269,6 +272,14 @@ openlineage:
     print(f"DS: data extraction complete - shape {result.shape}")
     result.to_parquet(output_path.path)
 
+    parsed = urlparse(output_path.uri)
+    OLClient(url="http://marquez").emit_job(
+        "ds_data_extraction",
+        inputs=[Dataset(source=ol_namespace, name="customer_features_view")],
+        outputs=[Dataset(source=f"{parsed.scheme}://{parsed.netloc}", name=parsed.path.lstrip("/"))],
+    )
+    print("DS: data extraction lineage emitted")
+
 
 # =======================================================================
 # DS - Feature Engineering
@@ -279,8 +290,11 @@ def ds_feature_engineering(
     output_path: dsl.Output[dsl.Dataset],
 ) -> None:
     """Add derived features."""
+    from urllib.parse import urlparse
+
     import numpy as np
     import pandas as pd
+    from openlineage_sdk import OLClient, Dataset
 
     df = pd.read_parquet(dataset.path)
     tenure_safe = df["tenure_months"].replace(0, 1)
@@ -292,6 +306,15 @@ def ds_feature_engineering(
 
     print(f"DS: feature engineering complete - shape {df.shape}")
     df.to_parquet(output_path.path)
+
+    parsed_in = urlparse(dataset.uri)
+    parsed_out = urlparse(output_path.uri)
+    OLClient(url="http://marquez").emit_job(
+        "ds_feature_engineering",
+        inputs=[Dataset(source=f"{parsed_in.scheme}://{parsed_in.netloc}", name=parsed_in.path.lstrip("/"))],
+        outputs=[Dataset(source=f"{parsed_out.scheme}://{parsed_out.netloc}", name=parsed_out.path.lstrip("/"))],
+    )
+    print("DS: feature engineering lineage emitted")
 
 
 # =======================================================================
@@ -305,8 +328,6 @@ def ds_model_training(
     s3_endpoint: str,
     aws_key: str,
     aws_secret: str,
-    pg_host: str = "postgres",
-    pg_database: str = "warehouse",
 ) -> str:
     """Train XGBoost, log to MLflow. Returns JSON with run_id, model_uri, metrics."""
     import json
@@ -366,9 +387,8 @@ def ds_model_training(
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run() as run:
-        dataset_source = f"postgresql://{pg_host}:5432/{pg_database}.customer_features"
         train_dataset = mlflow.data.from_pandas(
-            df, source=URIDatasetSource(dataset_source), name="customer_features_view",
+            df, source=URIDatasetSource(dataset.uri), name="engineered_features",
         )
         mlflow.log_input(train_dataset, context="training")
 
@@ -551,8 +571,6 @@ def customer_churn_pipeline(
         s3_endpoint=s3_endpoint,
         aws_key=aws_key,
         aws_secret=aws_secret,
-        pg_host=pg_host,
-        pg_database="warehouse",
     )
     train_task.set_caching_options(False)
 

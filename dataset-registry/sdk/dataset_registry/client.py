@@ -73,6 +73,18 @@ class RegistryClient:
             raise RegistryError(f"Lookup failed: HTTP {resp.status_code}")
         return Dataset.from_dict(resp.json())
 
+    def get_dataset_by_name(self, name: str) -> Dataset:
+        resp = requests.get(
+            self._api("/datasets/lookup"),
+            params={"name": name},
+            timeout=self.timeout,
+        )
+        if resp.status_code == 404:
+            raise DatasetNotFoundError(f"Dataset with name '{name}' not found")
+        if resp.status_code != 200:
+            raise RegistryError(f"Lookup by name failed: HTTP {resp.status_code}")
+        return Dataset.from_dict(resp.json())
+
     def get_dataset_by_id(self, dataset_id: str | UUID) -> Dataset:
         resp = requests.get(self._api(f"/datasets/{dataset_id}"), timeout=self.timeout)
         if resp.status_code == 404:
