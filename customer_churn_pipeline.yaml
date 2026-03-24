@@ -100,14 +100,6 @@ components:
           parameterType: STRING
         experiment_name:
           parameterType: STRING
-        pg_database:
-          defaultValue: warehouse
-          isOptional: true
-          parameterType: STRING
-        pg_host:
-          defaultValue: postgres
-          isOptional: true
-          parameterType: STRING
         s3_endpoint:
           parameterType: STRING
         tracking_uri:
@@ -204,15 +196,17 @@ deploymentSpec:
           \    table_name: str,\n    pg_host: str,\n    redis_host: str,\n    materialize_done:\
           \ str,\n    output_path: dsl.Output[dsl.Dataset],\n) -> None:\n    \"\"\"\
           Retrieve historical features from Feast and save as parquet.\"\"\"\n   \
-          \ import os\n    import pandas as pd\n    from sqlalchemy import create_engine,\
-          \ text\n    from feast import FeatureStore\n\n    ol_namespace = os.environ.get(\"\
-          OPENLINEAGE_NAMESPACE\", \"default\")\n    fs_yaml = os.path.join(feast_repo_path,\
-          \ \"feature_store.yaml\")\n    with open(fs_yaml, \"w\") as f:\n       \
-          \ f.write(f\"\"\"\\\nproject: {ol_namespace}\nprovider: local\nregistry:\n\
-          \  registry_type: sql\n  path: postgresql://feast:feast@{pg_host}:5432/warehouse\n\
-          \  cache_ttl_seconds: 60\noffline_store:\n  type: postgres\n  host: {pg_host}\n\
-          \  port: 5432\n  database: warehouse\n  db_schema: public\n  user: feast\n\
-          \  password: feast\nonline_store:\n  type: redis\n  connection_string: {redis_host}:6379\n\
+          \ import os\n    from urllib.parse import urlparse\n\n    import pandas\
+          \ as pd\n    from sqlalchemy import create_engine, text\n    from feast\
+          \ import FeatureStore\n    from openlineage_sdk import OLClient, Dataset\n\
+          \n    ol_namespace = os.environ.get(\"OPENLINEAGE_NAMESPACE\", \"default\"\
+          )\n    fs_yaml = os.path.join(feast_repo_path, \"feature_store.yaml\")\n\
+          \    with open(fs_yaml, \"w\") as f:\n        f.write(f\"\"\"\\\nproject:\
+          \ {ol_namespace}\nprovider: local\nregistry:\n  registry_type: sql\n  path:\
+          \ postgresql://feast:feast@{pg_host}:5432/warehouse\n  cache_ttl_seconds:\
+          \ 60\noffline_store:\n  type: postgres\n  host: {pg_host}\n  port: 5432\n\
+          \  database: warehouse\n  db_schema: public\n  user: feast\n  password:\
+          \ feast\nonline_store:\n  type: redis\n  connection_string: {redis_host}:6379\n\
           entity_key_serialization_version: 2\nopenlineage:\n  enabled: true\n  transport_type:\
           \ http\n  transport_url: http://marquez\n  emit_on_apply: true\n  emit_on_materialize:\
           \ true\n\"\"\")\n    print(f\"Patched {fs_yaml} -> pg={pg_host}, redis={redis_host},\
@@ -233,7 +227,12 @@ deploymentSpec:
           \       )\n\n    result = features_df.merge(\n        entity_df[[\"entity_id\"\
           , \"event_timestamp\", \"churn\"]],\n        on=[\"entity_id\", \"event_timestamp\"\
           ],\n        how=\"left\",\n    )\n    print(f\"DS: data extraction complete\
-          \ - shape {result.shape}\")\n    result.to_parquet(output_path.path)\n\n"
+          \ - shape {result.shape}\")\n    result.to_parquet(output_path.path)\n\n\
+          \    parsed = urlparse(output_path.uri)\n    OLClient(url=\"http://marquez\"\
+          ).emit_job(\n        \"ds_data_extraction\",\n        inputs=[Dataset(source=ol_namespace,\
+          \ name=\"customer_features_view\")],\n        outputs=[Dataset(source=f\"\
+          {parsed.scheme}://{parsed.netloc}\", name=parsed.path.lstrip(\"/\"))],\n\
+          \    )\n    print(\"DS: data extraction lineage emitted\")\n\n"
         image: image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest
     exec-ds-evaluation:
       container:
@@ -296,13 +295,20 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef ds_feature_engineering(\n    dataset: dsl.Input[dsl.Dataset],\n\
           \    output_path: dsl.Output[dsl.Dataset],\n) -> None:\n    \"\"\"Add derived\
-          \ features.\"\"\"\n    import numpy as np\n    import pandas as pd\n\n \
-          \   df = pd.read_parquet(dataset.path)\n    tenure_safe = df[\"tenure_months\"\
-          ].replace(0, 1)\n    df[\"charges_per_month\"] = df[\"total_charges\"] /\
-          \ tenure_safe\n    df[\"ticket_rate\"] = df[\"num_support_tickets\"] / tenure_safe\n\
-          \n    for col in [\"charges_per_month\", \"ticket_rate\"]:\n        df[col]\
-          \ = df[col].replace([np.inf, -np.inf], 0.0)\n\n    print(f\"DS: feature\
-          \ engineering complete - shape {df.shape}\")\n    df.to_parquet(output_path.path)\n\
+          \ features.\"\"\"\n    from urllib.parse import urlparse\n\n    import numpy\
+          \ as np\n    import pandas as pd\n    from openlineage_sdk import OLClient,\
+          \ Dataset\n\n    df = pd.read_parquet(dataset.path)\n    tenure_safe = df[\"\
+          tenure_months\"].replace(0, 1)\n    df[\"charges_per_month\"] = df[\"total_charges\"\
+          ] / tenure_safe\n    df[\"ticket_rate\"] = df[\"num_support_tickets\"] /\
+          \ tenure_safe\n\n    for col in [\"charges_per_month\", \"ticket_rate\"\
+          ]:\n        df[col] = df[col].replace([np.inf, -np.inf], 0.0)\n\n    print(f\"\
+          DS: feature engineering complete - shape {df.shape}\")\n    df.to_parquet(output_path.path)\n\
+          \n    parsed_in = urlparse(dataset.uri)\n    parsed_out = urlparse(output_path.uri)\n\
+          \    OLClient(url=\"http://marquez\").emit_job(\n        \"ds_feature_engineering\"\
+          ,\n        inputs=[Dataset(source=f\"{parsed_in.scheme}://{parsed_in.netloc}\"\
+          , name=parsed_in.path.lstrip(\"/\"))],\n        outputs=[Dataset(source=f\"\
+          {parsed_out.scheme}://{parsed_out.netloc}\", name=parsed_out.path.lstrip(\"\
+          /\"))],\n    )\n    print(\"DS: feature engineering lineage emitted\")\n\
           \n"
         image: image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest
     exec-ds-model-registration:
@@ -384,8 +390,7 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef ds_model_training(\n    dataset: dsl.Input[dsl.Dataset],\n  \
           \  tracking_uri: str,\n    experiment_name: str,\n    s3_endpoint: str,\n\
-          \    aws_key: str,\n    aws_secret: str,\n    pg_host: str = \"postgres\"\
-          ,\n    pg_database: str = \"warehouse\",\n) -> str:\n    \"\"\"Train XGBoost,\
+          \    aws_key: str,\n    aws_secret: str,\n) -> str:\n    \"\"\"Train XGBoost,\
           \ log to MLflow. Returns JSON with run_id, model_uri, metrics.\"\"\"\n \
           \   import json\n    import os\n\n    import mlflow\n    import mlflow.data\n\
           \    import mlflow.sklearn\n    import numpy as np\n    import pandas as\
@@ -414,22 +419,21 @@ deploymentSpec:
           )\n    if mlflow.get_experiment_by_name(experiment_name) is None:\n    \
           \    mlflow.create_experiment(experiment_name, artifact_location=artifact_root)\n\
           \    mlflow.set_experiment(experiment_name)\n\n    with mlflow.start_run()\
-          \ as run:\n        dataset_source = f\"postgresql://{pg_host}:5432/{pg_database}.customer_features\"\
-          \n        train_dataset = mlflow.data.from_pandas(\n            df, source=URIDatasetSource(dataset_source),\
-          \ name=\"customer_features_view\",\n        )\n        mlflow.log_input(train_dataset,\
-          \ context=\"training\")\n\n        mlflow.log_params(params)\n\n       \
-          \ model = xgb.XGBClassifier(**params)\n        model.fit(X_train, y_train,\
-          \ eval_set=[(X_test, y_test)], verbose=False)\n\n        y_pred = model.predict(X_test)\n\
-          \        y_prob = model.predict_proba(X_test)[:, 1]\n\n        metrics =\
-          \ {\n            \"roc_auc\": float(roc_auc_score(y_test, y_prob)),\n  \
-          \          \"f1\": float(f1_score(y_test, y_pred)),\n            \"precision\"\
-          : float(precision_score(y_test, y_pred)),\n            \"recall\": float(recall_score(y_test,\
-          \ y_pred)),\n        }\n        mlflow.log_metrics(metrics)\n\n        info\
-          \ = mlflow.sklearn.log_model(model, artifact_path=\"model\")\n\n       \
-          \ print(f\"DS: model training complete - metrics: {metrics}\")\n       \
-          \ return json.dumps({\n            \"run_id\": run.info.run_id,\n      \
-          \      \"model_uri\": info.model_uri,\n            \"metrics\": metrics,\n\
-          \        })\n\n"
+          \ as run:\n        train_dataset = mlflow.data.from_pandas(\n          \
+          \  df, source=URIDatasetSource(dataset.uri), name=\"engineered_features\"\
+          ,\n        )\n        mlflow.log_input(train_dataset, context=\"training\"\
+          )\n\n        mlflow.log_params(params)\n\n        model = xgb.XGBClassifier(**params)\n\
+          \        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)\n\
+          \n        y_pred = model.predict(X_test)\n        y_prob = model.predict_proba(X_test)[:,\
+          \ 1]\n\n        metrics = {\n            \"roc_auc\": float(roc_auc_score(y_test,\
+          \ y_prob)),\n            \"f1\": float(f1_score(y_test, y_pred)),\n    \
+          \        \"precision\": float(precision_score(y_test, y_pred)),\n      \
+          \      \"recall\": float(recall_score(y_test, y_pred)),\n        }\n   \
+          \     mlflow.log_metrics(metrics)\n\n        info = mlflow.sklearn.log_model(model,\
+          \ artifact_path=\"model\")\n\n        print(f\"DS: model training complete\
+          \ - metrics: {metrics}\")\n        return json.dumps({\n            \"run_id\"\
+          : run.info.run_id,\n            \"model_uri\": info.model_uri,\n       \
+          \     \"metrics\": metrics,\n        })\n\n"
         image: image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest
     exec-platform-feast-apply:
       container:
@@ -682,11 +686,6 @@ root:
               componentInputParameter: aws_secret
             experiment_name:
               componentInputParameter: experiment_name
-            pg_database:
-              runtimeValue:
-                constant: warehouse
-            pg_host:
-              componentInputParameter: pg_host
             s3_endpoint:
               componentInputParameter: s3_endpoint
             tracking_uri:

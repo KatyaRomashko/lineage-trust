@@ -107,6 +107,17 @@ def get_dataset_by_source(source: str) -> dict | None:
     return _row_to_dict(row, cols)
 
 
+def get_dataset_by_name(name: str) -> dict | None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT {COLUMNS} FROM datasets WHERE name = %s LIMIT 1", (name,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cols = [desc[0] for desc in cur.description]
+    return _row_to_dict(row, cols)
+
+
 def list_datasets(tag: str | None = None) -> list[dict]:
     clauses = []
     params: list = []

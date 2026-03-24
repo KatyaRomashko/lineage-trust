@@ -14,6 +14,7 @@ from db import (
     create_dataset,
     delete_dataset,
     get_dataset_by_id,
+    get_dataset_by_name,
     get_dataset_by_source,
     init_db,
     list_datasets,
@@ -65,8 +66,16 @@ def list_all(tag: Optional[str] = Query(None)):
 
 
 @app.get("/api/v1/datasets/lookup", response_model=Dataset)
-def lookup(source: str = Query(...)):
-    row = get_dataset_by_source(source)
+def lookup(
+    source: Optional[str] = Query(None),
+    name: Optional[str] = Query(None),
+):
+    if not source and not name:
+        raise HTTPException(400, "Provide either 'source' or 'name' query parameter")
+    if source:
+        row = get_dataset_by_source(source)
+    else:
+        row = get_dataset_by_name(name)
     if not row:
         raise HTTPException(404, "Dataset not found")
     return Dataset(**row)

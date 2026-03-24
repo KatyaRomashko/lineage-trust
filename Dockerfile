@@ -6,7 +6,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 COPY wheels/ wheels/
-RUN pip3 install --no-cache-dir -r requirements.txt
+COPY openlineage-sdk/ openlineage-sdk/
+RUN pip3 install --no-cache-dir -r requirements.txt && \
+    pip3 install --no-cache-dir ./openlineage-sdk
 
 COPY configs/ configs/
 COPY src/ src/
