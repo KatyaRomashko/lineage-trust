@@ -44,7 +44,7 @@ _adapters: dict = {}
 _initialized: bool = False
 
 # Available tool adapters
-AVAILABLE_TOOLS = ["mlflow"]  # Will expand: "ray", "kfp", "llamastack"
+AVAILABLE_TOOLS = ["mlflow", "kfp"]  # Will expand: "ray", "llamastack"
 
 
 def init(
@@ -193,13 +193,14 @@ def _load_adapter(tool: str, emitter: OpenLineageEmitter, namespace: str) -> Too
         from openlineage_oai.adapters.mlflow import MLflowAdapter
 
         return MLflowAdapter(emitter, namespace)
+    elif tool == "kfp":
+        from openlineage_oai.adapters.kfp import KFPAdapter
+
+        return KFPAdapter(emitter, namespace)
     # Future adapters:
     # elif tool == "ray":
     #     from openlineage_oai.adapters.ray import RayAdapter
     #     return RayAdapter(emitter, namespace)
-    # elif tool == "kfp":
-    #     from openlineage_oai.adapters.kfp import KFPAdapter
-    #     return KFPAdapter(emitter, namespace)
     # elif tool == "llamastack":
     #     from openlineage_oai.adapters.llamastack import LlamaStackAdapter
     #     return LlamaStackAdapter(emitter, namespace)

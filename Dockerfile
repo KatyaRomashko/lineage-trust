@@ -7,8 +7,10 @@ WORKDIR /app
 COPY requirements.txt .
 COPY wheels/ wheels/
 COPY openlineage-sdk/ openlineage-sdk/
+COPY openlineage-oai/ openlineage-oai/
 RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pip3 install --no-cache-dir ./openlineage-sdk
+    pip3 install --no-cache-dir ./openlineage-sdk && \
+    pip3 install --no-cache-dir ./openlineage-oai[mlflow]
 
 COPY configs/ configs/
 COPY src/ src/

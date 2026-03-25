@@ -19,8 +19,8 @@ mlflow>=3.10.0,<4
 # OpenLineage — official client (needed by Feast OL emitter)
 openlineage-python>=1.0.0
 
-# OpenLineage — client-side MLflow tracking store wrapper
-openlineage-oai[mlflow] @ git+https://github.com/rh-waterford-et/openlineage-poc.git
+# OpenLineage — client-side MLflow tracking store wrapper + KFP adapter
+# Installed from local copy in Dockerfile (./openlineage-oai[mlflow])
 
 # Kubeflow Pipelines
 kfp>=2.7.0,<3
