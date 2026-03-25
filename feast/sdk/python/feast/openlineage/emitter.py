@@ -758,6 +758,7 @@ class FeastOpenLineageEmitter:
                 from openlineage.client.facet_v2 import documentation_dataset
 
                 from feast.openlineage.facets import FeastFeatureViewFacet
+                from feast.openlineage.mappers import _resolve_feature_view_output_identity
 
                 fv_outputs = []
                 for fv in feature_views:
@@ -797,10 +798,14 @@ class FeastOpenLineageEmitter:
                         tags=fv.tags if hasattr(fv, "tags") else {},
                     )
 
+                    out_ns, out_name = _resolve_feature_view_output_identity(
+                        fv, namespace, self._repo_config
+                    )
+
                     fv_outputs.append(
                         OutputDataset(
-                            namespace=namespace,
-                            name=fv.name,
+                            namespace=out_ns,
+                            name=out_name,
                             facets=output_facets,
                         )
                     )

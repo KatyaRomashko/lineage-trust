@@ -6,8 +6,8 @@ tool-specific logic for intercepting operations and emitting lineage.
 
 Available adapters:
 - mlflow: MLflow tracking store wrapper
+- kfp: Kubeflow Pipelines v2 component context manager
 - ray: (planned) Ray Data and Train hooks
-- kfp: (planned) Kubeflow Pipelines component wrapper
 - llamastack: (planned) LlamaStack inference hooks
 """
 

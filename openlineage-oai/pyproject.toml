@@ -36,6 +36,11 @@ mlflow = [
     "mlflow>=2.0.0",
 ]
 
+# KFP adapter
+kfp = [
+    "kfp>=2.0.0",
+]
+
 # LlamaStack adapter (future)
 llamastack = [
     "llama-stack>=0.1.0",
@@ -44,7 +49,8 @@ llamastack = [
 # All adapters (for convenience)
 all = [
     "mlflow>=2.0.0",
-    # Future: ray, kfp, llamastack
+    "kfp>=2.0.0",
+    # Future: ray, llamastack
 ]
 
 # Development dependencies

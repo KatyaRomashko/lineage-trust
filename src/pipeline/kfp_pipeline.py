@@ -43,6 +43,7 @@ def platform_spark_etl(
     OPENLINEAGE_NAMESPACE is injected by the Argo workflow controller."""
     import os
     import subprocess
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
     os.environ["MINIO_ENDPOINT"] = minio_endpoint
     os.environ["PG_HOST"] = pg_host
@@ -54,15 +55,21 @@ def platform_spark_etl(
     os.environ["AWS_ACCESS_KEY_ID"] = aws_access_key
     os.environ["AWS_SECRET_ACCESS_KEY"] = aws_secret_key
 
-    result = subprocess.run(
-        ["python3", "/opt/spark/spark_etl.py"],
-        capture_output=True, text=True,
-    )
-    print(result.stdout)
-    if result.returncode != 0:
-        print(f"STDERR: {result.stderr}")
-        raise RuntimeError(f"Spark ETL failed: {result.stderr[:500]}")
-    print("Platform: spark ETL succeeded")
+    with kfp_lineage(
+        "platform_spark_etl",
+        inputs=[{"namespace": "s3://raw-data", "name": "customers.csv"}],
+        outputs=[{"namespace": f"postgres://{pg_host}:5432", "name": f"{pg_database}.{warehouse_table}"}],
+        url=openlineage_url,
+    ):
+        result = subprocess.run(
+            ["python3", "/opt/spark/spark_etl.py"],
+            capture_output=True, text=True,
+        )
+        print(result.stdout)
+        if result.returncode != 0:
+            print(f"STDERR: {result.stderr}")
+            raise RuntimeError(f"Spark ETL failed: {result.stderr[:500]}")
+        print("Platform: spark ETL succeeded")
     return "etl_done"
 
 
@@ -78,6 +85,7 @@ def platform_feast_apply(
     """Run feast apply to register feature definitions. Emits OpenLineage events."""
     import os
     import subprocess
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     fs_yaml = os.path.join(feast_repo_path, "feature_store.yaml")
@@ -110,19 +118,30 @@ openlineage:
 """)
     print(f"Patched {fs_yaml} -> ol_ns={ol_namespace}")
 
-    env = os.environ.copy()
-    env["REDIS_PORT"] = "6379"
-    result = subprocess.run(
-        ["feast", "apply"],
-        cwd=feast_repo_path,
-        capture_output=True, text=True,
-        env=env,
-    )
-    print(result.stdout)
-    if result.returncode != 0:
-        print(f"STDERR: {result.stderr}")
-        raise RuntimeError(f"feast apply failed: {result.stderr[:500]}")
-    print("Platform: feast apply succeeded")
+    pg_ns = f"postgres://{pg_host}:5432"
+
+    with kfp_lineage(
+        "platform_feast_apply",
+        inputs=[{"namespace": pg_ns, "name": "warehouse.customer_features"}],
+        outputs=[
+            {"namespace": pg_ns, "name": "warehouse.customer_features_view"},
+            {"namespace": f"redis://{redis_host}:6379", "name": "customer_features_view"},
+        ],
+        url="http://marquez",
+    ):
+        env = os.environ.copy()
+        env["REDIS_PORT"] = "6379"
+        result = subprocess.run(
+            ["feast", "apply"],
+            cwd=feast_repo_path,
+            capture_output=True, text=True,
+            env=env,
+        )
+        print(result.stdout)
+        if result.returncode != 0:
+            print(f"STDERR: {result.stderr}")
+            raise RuntimeError(f"feast apply failed: {result.stderr[:500]}")
+        print("Platform: feast apply succeeded")
     return "applied"
 
 
@@ -140,6 +159,7 @@ def platform_feast_materialize(
     import os
     from datetime import datetime, timedelta
     from feast import FeatureStore
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     fs_yaml = os.path.join(feast_repo_path, "feature_store.yaml")
@@ -171,12 +191,20 @@ openlineage:
   emit_on_materialize: true
 """)
 
-    store = FeatureStore(repo_path=feast_repo_path)
-    end = datetime.utcnow()
-    start = end - timedelta(days=1000)
-    print(f"Materializing features {start.isoformat()} -> {end.isoformat()}")
-    store.materialize(start_date=start, end_date=end)
-    print("Platform: feast materialize succeeded")
+    pg_ns = f"postgres://{pg_host}:5432"
+
+    with kfp_lineage(
+        "platform_feast_materialize",
+        inputs=[{"namespace": pg_ns, "name": "warehouse.customer_features_view"}],
+        outputs=[{"namespace": f"redis://{redis_host}:6379", "name": "customer_features_view"}],
+        url="http://marquez",
+    ):
+        store = FeatureStore(repo_path=feast_repo_path)
+        end = datetime.utcnow()
+        start = end - timedelta(days=1000)
+        print(f"Materializing features {start.isoformat()} -> {end.isoformat()}")
+        store.materialize(start_date=start, end_date=end)
+        print("Platform: feast materialize succeeded")
     return "materialized"
 
 
@@ -195,12 +223,11 @@ def ds_data_extraction(
 ) -> None:
     """Retrieve historical features from Feast and save as parquet."""
     import os
-    from urllib.parse import urlparse
 
     import pandas as pd
     from sqlalchemy import create_engine, text
     from feast import FeatureStore
-    from openlineage_sdk import OLClient, Dataset
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     fs_yaml = os.path.join(feast_repo_path, "feature_store.yaml")
@@ -233,52 +260,50 @@ openlineage:
 """)
     print(f"Patched {fs_yaml} -> pg={pg_host}, redis={redis_host}, ol_ns={ol_namespace}")
 
-    engine = create_engine(pg_url)
-    with engine.connect() as conn:
-        entity_df = pd.read_sql(
-            text(f"SELECT entity_id, event_timestamp, churn FROM {table_name}"),
-            conn,
-        )
-    engine.dispose()
-    entity_df["event_timestamp"] = pd.to_datetime(
-        entity_df["event_timestamp"], utc=True,
-    )
-
-    store = FeatureStore(repo_path=feast_repo_path)
-    features = [
-        "customer_features_view:tenure_months",
-        "customer_features_view:monthly_charges",
-        "customer_features_view:total_charges",
-        "customer_features_view:num_support_tickets",
-        "customer_features_view:contract_type",
-        "customer_features_view:internet_service",
-        "customer_features_view:payment_method",
-    ]
-    features_df = store.get_historical_features(
-        entity_df=entity_df[["entity_id", "event_timestamp"]],
-        features=features,
-    ).to_df()
-
-    for df_ in (features_df, entity_df):
-        df_["event_timestamp"] = pd.to_datetime(
-            df_["event_timestamp"], utc=True,
-        )
-
-    result = features_df.merge(
-        entity_df[["entity_id", "event_timestamp", "churn"]],
-        on=["entity_id", "event_timestamp"],
-        how="left",
-    )
-    print(f"DS: data extraction complete - shape {result.shape}")
-    result.to_parquet(output_path.path)
-
-    parsed = urlparse(output_path.uri)
-    OLClient(url="http://marquez").emit_job(
+    with kfp_lineage(
         "ds_data_extraction",
-        inputs=[Dataset(source=ol_namespace, name="customer_features_view")],
-        outputs=[Dataset(source=f"{parsed.scheme}://{parsed.netloc}", name=parsed.path.lstrip("/"))],
-    )
-    print("DS: data extraction lineage emitted")
+        inputs=[{"namespace": f"postgres://{pg_host}:5432", "name": "warehouse.customer_features_view"}],
+        outputs=[output_path],
+        url="http://marquez",
+    ):
+        engine = create_engine(pg_url)
+        with engine.connect() as conn:
+            entity_df = pd.read_sql(
+                text(f"SELECT entity_id, event_timestamp, churn FROM {table_name}"),
+                conn,
+            )
+        engine.dispose()
+        entity_df["event_timestamp"] = pd.to_datetime(
+            entity_df["event_timestamp"], utc=True,
+        )
+
+        store = FeatureStore(repo_path=feast_repo_path)
+        features = [
+            "customer_features_view:tenure_months",
+            "customer_features_view:monthly_charges",
+            "customer_features_view:total_charges",
+            "customer_features_view:num_support_tickets",
+            "customer_features_view:contract_type",
+            "customer_features_view:internet_service",
+            "customer_features_view:payment_method",
+        ]
+        features_df = store.get_historical_features(
+            entity_df=entity_df[["entity_id", "event_timestamp"]],
+            features=features,
+        ).to_df()
+
+        for df_ in (features_df, entity_df):
+            df_["event_timestamp"] = pd.to_datetime(
+                df_["event_timestamp"], utc=True,
+            )
+
+        result = features_df.merge(
+            entity_df[["entity_id", "event_timestamp", "churn"]],
+            on=["entity_id", "event_timestamp"],
+            how="left",
+        )
+        print(f"DS: data extraction complete - shape {result.shape}")
+        result.to_parquet(output_path.path)
 
 
 # =======================================================================
@@ -290,31 +315,26 @@ def ds_feature_engineering(
     output_path: dsl.Output[dsl.Dataset],
 ) -> None:
     """Add derived features."""
-    from urllib.parse import urlparse
-
     import numpy as np
     import pandas as pd
-    from openlineage_sdk import OLClient, Dataset
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
-    df = pd.read_parquet(dataset.path)
-    tenure_safe = df["tenure_months"].replace(0, 1)
-    df["charges_per_month"] = df["total_charges"] / tenure_safe
-    df["ticket_rate"] = df["num_support_tickets"] / tenure_safe
-
-    for col in ["charges_per_month", "ticket_rate"]:
-        df[col] = df[col].replace([np.inf, -np.inf], 0.0)
-
-    print(f"DS: feature engineering complete - shape {df.shape}")
-    df.to_parquet(output_path.path)
-
-    parsed_in = urlparse(dataset.uri)
-    parsed_out = urlparse(output_path.uri)
-    OLClient(url="http://marquez").emit_job(
+    with kfp_lineage(
         "ds_feature_engineering",
-        inputs=[Dataset(source=f"{parsed_in.scheme}://{parsed_in.netloc}", name=parsed_in.path.lstrip("/"))],
-        outputs=[Dataset(source=f"{parsed_out.scheme}://{parsed_out.netloc}", name=parsed_out.path.lstrip("/"))],
-    )
-    print("DS: feature engineering lineage emitted")
+        inputs=[dataset],
+        outputs=[output_path],
+        url="http://marquez",
+    ):
+        df = pd.read_parquet(dataset.path)
+        tenure_safe = df["tenure_months"].replace(0, 1)
+        df["charges_per_month"] = df["total_charges"] / tenure_safe
+        df["ticket_rate"] = df["num_support_tickets"] / tenure_safe
+
+        for col in ["charges_per_month", "ticket_rate"]:
+            df[col] = df[col].replace([np.inf, -np.inf], 0.0)
+
+        print(f"DS: feature engineering complete - shape {df.shape}")
+        df.to_parquet(output_path.path)
 
 
 # =======================================================================
@@ -339,6 +359,7 @@ def ds_model_training(
     import numpy as np
     import pandas as pd
     import xgboost as xgb
+    from openlineage_oai.adapters.kfp import kfp_lineage
     from openlineage_oai.adapters.mlflow.dataset_source import URIDatasetSource
     from sklearn.metrics import (
         f1_score, precision_score, recall_score, roc_auc_score,
@@ -350,72 +371,76 @@ def ds_model_training(
     os.environ["AWS_ACCESS_KEY_ID"] = aws_key
     os.environ["AWS_SECRET_ACCESS_KEY"] = aws_secret
     os.environ["OPENLINEAGE_URL"] = "http://marquez"
-    # OPENLINEAGE_NAMESPACE is injected by the Argo workflow controller
-    # via fieldRef: metadata.namespace -- no need to set it here.
 
-    df = pd.read_parquet(dataset.path)
+    with kfp_lineage(
+        "ds_model_training",
+        inputs=[dataset],
+        outputs=[{"namespace": "s3://mlflow", "name": f"artifacts/{experiment_name}/model"}],
+        url="http://marquez",
+    ):
+        df = pd.read_parquet(dataset.path)
 
-    cat_cols = ["contract_type", "internet_service", "payment_method"]
-    for col in cat_cols:
-        df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+        cat_cols = ["contract_type", "internet_service", "payment_method"]
+        for col in cat_cols:
+            df[col] = LabelEncoder().fit_transform(df[col].astype(str))
 
-    feature_cols = [
-        "tenure_months", "monthly_charges", "total_charges",
-        "num_support_tickets", "contract_type", "internet_service",
-        "payment_method",
-    ]
-    X = df[feature_cols].values.astype(np.float32)
-    y = df["churn"].values.astype(np.int32)
+        feature_cols = [
+            "tenure_months", "monthly_charges", "total_charges",
+            "num_support_tickets", "contract_type", "internet_service",
+            "payment_method",
+        ]
+        X = df[feature_cols].values.astype(np.float32)
+        y = df["churn"].values.astype(np.int32)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y,
-    )
-
-    params = {
-        "max_depth": 6,
-        "learning_rate": 0.1,
-        "n_estimators": 200,
-        "objective": "binary:logistic",
-        "eval_metric": "logloss",
-        "seed": 42,
-    }
-
-    mlflow.set_tracking_uri(tracking_uri)
-    artifact_root = os.getenv("MLFLOW_S3_ARTIFACT_ROOT", "s3://mlflow/artifacts")
-    if mlflow.get_experiment_by_name(experiment_name) is None:
-        mlflow.create_experiment(experiment_name, artifact_location=artifact_root)
-    mlflow.set_experiment(experiment_name)
-
-    with mlflow.start_run() as run:
-        train_dataset = mlflow.data.from_pandas(
-            df, source=URIDatasetSource(dataset.uri), name="engineered_features",
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y,
         )
-        mlflow.log_input(train_dataset, context="training")
 
-        mlflow.log_params(params)
-
-        model = xgb.XGBClassifier(**params)
-        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
-
-        y_pred = model.predict(X_test)
-        y_prob = model.predict_proba(X_test)[:, 1]
-
-        metrics = {
-            "roc_auc": float(roc_auc_score(y_test, y_prob)),
-            "f1": float(f1_score(y_test, y_pred)),
-            "precision": float(precision_score(y_test, y_pred)),
-            "recall": float(recall_score(y_test, y_pred)),
+        params = {
+            "max_depth": 6,
+            "learning_rate": 0.1,
+            "n_estimators": 200,
+            "objective": "binary:logistic",
+            "eval_metric": "logloss",
+            "seed": 42,
         }
-        mlflow.log_metrics(metrics)
 
-        info = mlflow.sklearn.log_model(model, artifact_path="model")
+        mlflow.set_tracking_uri(tracking_uri)
+        artifact_root = os.getenv("MLFLOW_S3_ARTIFACT_ROOT", "s3://mlflow/artifacts")
+        if mlflow.get_experiment_by_name(experiment_name) is None:
+            mlflow.create_experiment(experiment_name, artifact_location=artifact_root)
+        mlflow.set_experiment(experiment_name)
 
-        print(f"DS: model training complete - metrics: {metrics}")
-        return json.dumps({
-            "run_id": run.info.run_id,
-            "model_uri": info.model_uri,
-            "metrics": metrics,
-        })
+        with mlflow.start_run() as run:
+            train_dataset = mlflow.data.from_pandas(
+                df, source=URIDatasetSource(dataset.uri), name="engineered_features",
+            )
+            mlflow.log_input(train_dataset, context="training")
+
+            mlflow.log_params(params)
+
+            model = xgb.XGBClassifier(**params)
+            model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+
+            y_pred = model.predict(X_test)
+            y_prob = model.predict_proba(X_test)[:, 1]
+
+            metrics = {
+                "roc_auc": float(roc_auc_score(y_test, y_prob)),
+                "f1": float(f1_score(y_test, y_pred)),
+                "precision": float(precision_score(y_test, y_pred)),
+                "recall": float(recall_score(y_test, y_pred)),
+            }
+            mlflow.log_metrics(metrics)
+
+            info = mlflow.sklearn.log_model(model, artifact_path="model")
+
+            print(f"DS: model training complete - metrics: {metrics}")
+            return json.dumps({
+                "run_id": run.info.run_id,
+                "model_uri": info.model_uri,
+                "metrics": metrics,
+            })
 
 
 # =======================================================================
@@ -425,14 +450,21 @@ def ds_model_training(
 def ds_evaluation(train_result_json: str) -> str:
     """Display and return evaluation metrics."""
     import json
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
-    result = json.loads(train_result_json)
-    m = result["metrics"]
-    print(
-        f"DS: evaluation  ROC-AUC={m['roc_auc']:.4f}  F1={m['f1']:.4f}  "
-        f"Precision={m['precision']:.4f}  Recall={m['recall']:.4f}"
-    )
-    return json.dumps(m)
+    with kfp_lineage(
+        "ds_evaluation",
+        inputs=[{"namespace": "s3://mlflow", "name": "artifacts/model"}],
+        outputs=[],
+        url="http://marquez",
+    ):
+        result = json.loads(train_result_json)
+        m = result["metrics"]
+        print(
+            f"DS: evaluation  ROC-AUC={m['roc_auc']:.4f}  F1={m['f1']:.4f}  "
+            f"Precision={m['precision']:.4f}  Recall={m['recall']:.4f}"
+        )
+        return json.dumps(m)
 
 
 # =======================================================================
@@ -455,38 +487,43 @@ def ds_model_registration(
 
     import mlflow
     from mlflow.tracking import MlflowClient
+    from openlineage_oai.adapters.kfp import kfp_lineage
 
     os.environ["MLFLOW_S3_ENDPOINT_URL"] = s3_endpoint
     os.environ["AWS_ACCESS_KEY_ID"] = aws_key
     os.environ["AWS_SECRET_ACCESS_KEY"] = aws_secret
 
-    # The model registry doesn't have an openlineage+ scheme plugin,
-    # so point it at the plain MLflow server URL directly.
     plain_uri = tracking_uri.replace("openlineage+", "")
     os.environ["MLFLOW_REGISTRY_URI"] = plain_uri
 
-    result = json.loads(train_result_json)
-    metrics = json.loads(metrics_json)
+    with kfp_lineage(
+        "ds_model_registration",
+        inputs=[{"namespace": "s3://mlflow", "name": "artifacts/model"}],
+        outputs=[{"namespace": "mlflow", "name": f"models:/{model_name}"}],
+        url="http://marquez",
+    ):
+        result = json.loads(train_result_json)
+        metrics = json.loads(metrics_json)
 
-    if metrics["roc_auc"] < roc_auc_threshold:
-        print(f"DS: model registration  ROC-AUC {metrics['roc_auc']:.4f} < {roc_auc_threshold} - skipping")
-        return json.dumps({"registered": False, "reason": "below_threshold"})
+        if metrics["roc_auc"] < roc_auc_threshold:
+            print(f"DS: model registration  ROC-AUC {metrics['roc_auc']:.4f} < {roc_auc_threshold} - skipping")
+            return json.dumps({"registered": False, "reason": "below_threshold"})
 
-    mlflow.set_tracking_uri(tracking_uri)
-    try:
-        mv = mlflow.register_model(model_uri=result["model_uri"], name=model_name)
-        client = MlflowClient()
-        client.set_registered_model_alias(model_name, "champion", str(mv.version))
-        print(f"DS: registered {model_name} v{mv.version} as alias 'champion'")
-        return json.dumps({
-            "registered": True,
-            "model_name": model_name,
-            "version": int(mv.version),
-            "alias": "champion",
-        })
-    except Exception as e:
-        print(f"DS: model registration failed (non-fatal): {e}")
-        return json.dumps({"registered": False, "reason": str(e)[:200]})
+        mlflow.set_tracking_uri(tracking_uri)
+        try:
+            mv = mlflow.register_model(model_uri=result["model_uri"], name=model_name)
+            client = MlflowClient()
+            client.set_registered_model_alias(model_name, "champion", str(mv.version))
+            print(f"DS: registered {model_name} v{mv.version} as alias 'champion'")
+            return json.dumps({
+                "registered": True,
+                "model_name": model_name,
+                "version": int(mv.version),
+                "alias": "champion",
+            })
+        except Exception as e:
+            print(f"DS: model registration failed (non-fatal): {e}")
+            return json.dumps({"registered": False, "reason": str(e)[:200]})
 
 
 # =======================================================================

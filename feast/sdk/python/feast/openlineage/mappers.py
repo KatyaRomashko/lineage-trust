@@ -223,6 +223,35 @@ def _resolve_data_source_identity(
     return default_namespace, default_name
 
 
+def _resolve_feature_view_output_identity(
+    feature_view: "FeatureView",
+    default_namespace: str,
+    repo_config: Any = None,
+) -> Tuple[str, str]:
+    """
+    Resolve the OpenLineage identity for a feature view output dataset.
+
+    Uses the batch source and repo_config to produce a URI-based identity
+    that correlates with identities emitted by other tools (Spark, KFP).
+    Falls back to ``(namespace, feature_view.name)`` when the batch source
+    is not a database-backed source or repo_config is unavailable.
+    """
+    if repo_config is not None and hasattr(feature_view, "batch_source") and feature_view.batch_source:
+        ns, _ = _resolve_data_source_identity(
+            feature_view.batch_source,
+            default_namespace,
+            feature_view.name,
+            repo_config,
+        )
+        if ns != default_namespace:
+            offline = repo_config.offline_store
+            database = getattr(offline, "database", None)
+            name = f"{database}.{feature_view.name}" if database else feature_view.name
+            return ns, name
+
+    return default_namespace, feature_view.name
+
+
 def _get_data_source_uri(data_source: "DataSource") -> str:
     """
     Get the URI for a data source.
@@ -346,10 +375,14 @@ def feature_view_to_job(
             fields=[feast_field_to_schema_field(f) for f in feature_view.features]
         )
 
+    out_ns, out_name = _resolve_feature_view_output_identity(
+        feature_view, namespace, repo_config
+    )
+
     outputs = [
         OutputDataset(
-            namespace=namespace,
-            name=feature_view.name,
+            namespace=out_ns,
+            name=out_name,
             facets=output_facets,
         )
     ]
