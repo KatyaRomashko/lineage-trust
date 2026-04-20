@@ -3,7 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mlflow-db-pvc
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -18,7 +18,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: mlflow-db-secret
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -33,7 +33,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mlflow-db
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -98,7 +98,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mlflow-db
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-db
     app.kubernetes.io/part-of: feast-kfp-mlflow

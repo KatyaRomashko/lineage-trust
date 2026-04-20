@@ -13,7 +13,7 @@ pip install ./openlineage-sdk
 Or use the pre-built image:
 
 ```
-quay.io/rh_et_wd/lineage/sdk:latest
+quay.io/rh_et_wd/fkm/sdk:latest
 ```
 
 ## Configuration
@@ -23,7 +23,7 @@ The SDK reads from environment variables by default:
 | Variable | Description | Required |
 |---|---|---|
 | `OPENLINEAGE_URL` | OpenLineage API endpoint (e.g. `http://marquez`) | Yes |
-| `OPENLINEAGE_NAMESPACE` | Namespace for jobs (e.g. `lineage`) | No (defaults to `default`) |
+| `OPENLINEAGE_NAMESPACE` | Namespace for jobs (e.g. `fkm`) | No (defaults to `default`) |
 | `DATASET_REGISTRY_URL` | Dataset Registry endpoint (e.g. `http://dataset-registry-api:8080`) | Only for `client.dataset()` |
 
 All can be overridden via constructor arguments:

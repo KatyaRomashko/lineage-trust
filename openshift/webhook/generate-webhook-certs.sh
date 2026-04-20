@@ -2,7 +2,7 @@
 # Generate TLS certificates for the lineage webhook
 set -euo pipefail
 
-NAMESPACE=${1:-lineage}
+NAMESPACE=${1:-fkm}
 SERVICE_NAME="lineage-webhook"
 SECRET_NAME="lineage-webhook-certs"
 

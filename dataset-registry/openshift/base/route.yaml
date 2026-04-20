@@ -3,7 +3,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: dataset-registry
 spec:
@@ -21,7 +21,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: dataset-registry
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: dataset-registry
 spec:

@@ -59,6 +59,17 @@ def full_pipeline(
     aws_key: str = "minioadmin",
     aws_secret: str = "minioadmin123",
     roc_auc_threshold: float = 0.70,
+    agent_id: str = "spiffe://example.org/ns/churn/pipeline-agent",
+    spiffe_dev_identity_json: str = '{"sub": "spiffe://example.org/ns/churn/pipeline-agent"}',
+    opa_url: str = "http://opa:8181",
+    opa_strict: bool = True,
+    rekor_upload: bool = False,
+    spiffe_required: bool = False,
+    regional_policy: str = "NON_EU",
+    llm_trace_id: str = "",
+    llm_monitoring_tool: str = "langsmith",
+    modify_original_date: bool = False,
+    hours_deviation: float = 0.0,
     # -- RAG parameters --
     rag_bucket_name: str = "data",
     rag_document_prefix: str = "sample_docs/",
@@ -83,6 +94,7 @@ def full_pipeline(
         openlineage_url="http://marquez",
         aws_access_key=aws_key,
         aws_secret_key=aws_secret,
+        agent_id=agent_id,
     )
     etl_task.set_caching_options(False)
 
@@ -90,6 +102,7 @@ def full_pipeline(
         feast_repo_path=feast_repo_path,
         pg_host=pg_host,
         redis_host=redis_host,
+        agent_id=agent_id,
     )
     apply_task.after(etl_task)
     apply_task.set_caching_options(False)
@@ -99,6 +112,7 @@ def full_pipeline(
         pg_host=pg_host,
         redis_host=redis_host,
         apply_done=apply_task.output,
+        agent_id=agent_id,
     )
     materialize_task.set_caching_options(False)
 
@@ -113,11 +127,18 @@ def full_pipeline(
         pg_host=pg_host,
         redis_host=redis_host,
         materialize_done=materialize_task.output,
+        agent_id=agent_id,
     )
     extract_task.set_caching_options(False)
 
     engineer_task = ds_feature_engineering(
         dataset=extract_task.outputs["output_path"],
+        agent_id=agent_id,
+        regional_policy=regional_policy,
+        llm_trace_id=llm_trace_id,
+        llm_monitoring_tool=llm_monitoring_tool,
+        modify_original_date=modify_original_date,
+        hours_deviation=hours_deviation,
     )
     engineer_task.set_caching_options(False)
 
@@ -128,11 +149,13 @@ def full_pipeline(
         s3_endpoint=s3_endpoint,
         aws_key=aws_key,
         aws_secret=aws_secret,
+        agent_id=agent_id,
     )
     train_task.set_caching_options(False)
 
     eval_task = ds_evaluation(
         train_result_json=train_task.output,
+        agent_id=agent_id,
     )
     eval_task.set_caching_options(False)
 
@@ -145,6 +168,7 @@ def full_pipeline(
         aws_key=aws_key,
         aws_secret=aws_secret,
         roc_auc_threshold=roc_auc_threshold,
+        agent_id=agent_id,
     )
     reg_task.set_caching_options(False)
 
@@ -221,6 +245,11 @@ def full_pipeline(
         task.set_env_variable(
             "OPENLINEAGE_PARENT_JOB_NAME", PIPELINE_NAME,
         )
+        task.set_env_variable("SPIFFE_DEV_IDENTITY_JSON", spiffe_dev_identity_json)
+        task.set_env_variable("OPA_URL", opa_url)
+        task.set_env_variable("OPA_STRICT", "1" if opa_strict else "0")
+        task.set_env_variable("REKOR_UPLOAD", "1" if rekor_upload else "0")
+        task.set_env_variable("SPIFFE_REQUIRED", "1" if spiffe_required else "0")
 
 
 if __name__ == "__main__":

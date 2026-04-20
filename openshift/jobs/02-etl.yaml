@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: etl-job
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
     stage: "02-etl"
@@ -45,7 +45,7 @@ spec:
               echo "Marquez is up"
       containers:
         - name: spark-etl
-          image: image-registry.openshift-image-registry.svc:5000/lineage/spark-etl:latest
+          image: image-registry.openshift-image-registry.svc:5000/fkm/spark-etl:latest
           envFrom:
             - configMapRef:
                 name: fkm-config

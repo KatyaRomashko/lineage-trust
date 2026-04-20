@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: etl-job
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
     stage: "02-etl"

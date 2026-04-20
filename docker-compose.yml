@@ -97,6 +97,16 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Open Policy Agent (Rego policies for churn pipeline) ────────────────
+  opa:
+    image: openpolicyagent/opa:0.69.0-rootless
+    container_name: opa
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies:ro
+    command: ["run", "--server", "--addr=:8181", "/policies"]
+
   # ── FastAPI Inference Service ─────────────────────────────────────────
   inference-api:
     build:

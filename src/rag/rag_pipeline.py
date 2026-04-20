@@ -18,10 +18,10 @@ from kfp import dsl, compiler
 
 # Images built via OpenShift BuildConfig
 FKM_IMAGE = (
-    "image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest"
+    "image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest"
 )
 RAG_IMAGE = (
-    "image-registry.openshift-image-registry.svc:5000/lineage/rag-app:latest"
+    "image-registry.openshift-image-registry.svc:5000/fkm/rag-app:latest"
 )
 
 

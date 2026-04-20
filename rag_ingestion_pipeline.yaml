@@ -201,7 +201,7 @@ deploymentSpec:
           \    print(f\"OpenLineage event emitted: {namespace}/rag_chunk_documents\"\
           )\n\n    del chunks\n    gc.collect()\n\n    print(f\"Created {chunk_id}\
           \ chunks from {len(documents)} documents\")\n    return chunk_id\n\n"
-        image: image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-generate-embeddings:
       container:
         args:
@@ -273,7 +273,7 @@ deploymentSpec:
           )\n\n    return json.dumps({\n        \"model\": model_name,\n        \"\
           num_embeddings\": len(embeddings),\n        \"embedding_dim\": int(embedding_dim),\n\
           \    })\n\n"
-        image: image-registry.openshift-image-registry.svc:5000/lineage/rag-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/rag-app:latest
     exec-load-documents:
       container:
         args:
@@ -352,7 +352,7 @@ deploymentSpec:
           \        producer=\"rag-ingestion-pipeline/load\",\n    )\n    ol_client.emit(event)\n\
           \    print(f\"OpenLineage event emitted: {namespace}/rag_load_documents\"\
           )\n\n    return len(documents)\n\n"
-        image: image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-store-in-milvus:
       container:
         args:
@@ -465,7 +465,7 @@ deploymentSpec:
           \ num_entities,\n        \"embedding_dim\": embedding_dim,\n        \"index_type\"\
           : \"IVF_FLAT\",\n        \"metric_type\": \"COSINE\",\n        \"openlineage_run_id\"\
           : run_id,\n    })\n\n"
-        image: image-registry.openshift-image-registry.svc:5000/lineage/rag-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/rag-app:latest
 pipelineInfo:
   description: 'End-to-end RAG ingestion: load documents, chunk, embed, store in Milvus.
     Each step emits OpenLineage events tracking inputs/outputs. OPENLINEAGE_NAMESPACE

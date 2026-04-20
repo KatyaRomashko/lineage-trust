@@ -33,7 +33,7 @@ customers.csv → Spark ETL → warehouse.customer_features (Postgres)
 
 ### 2.1 Infrastructure (OpenShift)
 
-All services run in the `lineage` namespace on an OpenShift (ROSA) cluster:
+All services run in the `fkm` namespace on an OpenShift (ROSA) cluster:
 
 | Service | Purpose |
 |---|---|
@@ -45,7 +45,7 @@ All services run in the `lineage` namespace on an OpenShift (ROSA) cluster:
 | **DSPA** (Data Science Pipelines Application) | OpenShift AI's native KFP v2 runner |
 
 `OPENLINEAGE_NAMESPACE` is injected into every pod by the Argo workflow controller via
-`fieldRef: metadata.namespace`, so all tools default to the `lineage` namespace.
+`fieldRef: metadata.namespace`, so all tools default to the `fkm` namespace.
 
 ### 2.2 Pipeline Steps
 
@@ -83,7 +83,7 @@ Two images are built via OpenShift BuildConfigs:
 
 | Namespace | Used by |
 |---|---|
-| `lineage` | Feast jobs, SDK jobs, MLflow jobs |
+| `fkm` | Feast jobs, SDK jobs, MLflow jobs |
 | `postgres://postgres:5432` | Spark-written and Feast-read Postgres datasets |
 | `s3://raw-data` | Spark-read raw CSV |
 | `s3://pipeline-artifacts` | KFP intermediate artifacts (parquet files written by DS steps) |
@@ -153,7 +153,7 @@ name = f"{database}.{table}"
 This exactly matches what Spark emits, so Marquez sees them as the same dataset and the graph
 connects.
 
-**Feast project name**: Set to `{OPENLINEAGE_NAMESPACE}` (i.e. `lineage`) so that Feast jobs
+**Feast project name**: Set to `{OPENLINEAGE_NAMESPACE}` (i.e. `fkm`) so that Feast jobs
 appear in the correct Marquez namespace. The `feature_store.yaml` is written dynamically in each
 KFP component with the correct host/port values for the cluster.
 
@@ -276,10 +276,10 @@ namespace + name pair.
 | Tool | Namespace | Name | Format |
 |---|---|---|---|
 | Spark (JDBC write) | `postgres://postgres:5432` | `warehouse.customer_features` | Derived from JDBC URL |
-| Feast (before fix) | `lineage` | `customer_features_source` | `{project}/{source_name}` |
+| Feast (before fix) | `fkm` | `customer_features_source` | `{project}/{source_name}` |
 | Feast (after fix) | `postgres://postgres:5432` | `warehouse.customer_features` | Derived from RepoConfig offline store |
 | SDK | Whatever you pass | Whatever you pass | User-controlled |
-| MLflow | `lineage` | `model/model` | Derived from experiment/artifact |
+| MLflow | `fkm` | `model/model` | Derived from experiment/artifact |
 
 The Feast fix was the critical change — without it, Spark and Feast referred to the same
 physical Postgres table using completely different identities, breaking the graph.
@@ -290,16 +290,16 @@ physical Postgres table using completely different identities, breaking the grap
 Spark outputs:  postgres://postgres:5432 / warehouse.customer_features
                                     ↕  (same identity)
 Feast reads:    postgres://postgres:5432 / warehouse.customer_features
-Feast outputs:  lineage / customer_features_view
+Feast outputs:  fkm / customer_features_view
                                     ↕  (same identity)
-SDK reads:      lineage / customer_features_view
+SDK reads:      fkm / customer_features_view
 SDK outputs:    s3://pipeline-artifacts / <kfp-artifact-path>
                                     ↕  (same identity)
 SDK reads:      s3://pipeline-artifacts / <kfp-artifact-path>
 SDK outputs:    s3://pipeline-artifacts / <kfp-artifact-path-2>
                                     ↕  (same identity)
 MLflow reads:   s3://pipeline-artifacts / <kfp-artifact-path-2>
-MLflow outputs: lineage / model/model
+MLflow outputs: fkm / model/model
 ```
 
 Every `↕` is a join point in Marquez. If either side uses a different string, the graph breaks.
@@ -331,7 +331,7 @@ resolve dataset identities by name instead of hardcoding URIs.
 - **Fix**: Threaded `RepoConfig` through `FeatureStore → Emitter → Mappers`, added `_resolve_data_source_identity()` to construct URI-based identities for `PostgreSQLSource`
 
 ### 6.2 Spark "bridge lineage" hack
-- **Symptom**: Spark emitting `lineage:customer_features_source` instead of `postgres://postgres:5432/warehouse.customer_features`
+- **Symptom**: Spark emitting `fkm:customer_features_source` instead of `postgres://postgres:5432/warehouse.customer_features`
 - **Cause**: Previously deployed image contained a manual OL emitter overriding the native listener
 - **Fix**: Rebuilt `spark-etl` image from clean local code
 
@@ -346,9 +346,9 @@ resolve dataset identities by name instead of hardcoding URIs.
 - **Fix**: Added SDK `emit_job()` calls to intermediate steps that declare those KFP artifact URIs as outputs, completing the chain
 
 ### 6.5 Feast namespace confusion
-- **Symptom**: Feast jobs appearing in a `feast/lineage` namespace instead of `lineage`
+- **Symptom**: Feast jobs appearing in a `feast/fkm` namespace instead of `fkm`
 - **Cause**: Feast prepends `{namespace}/{project}` when a custom namespace is set
-- **Fix**: Set Feast project name to the `OPENLINEAGE_NAMESPACE` env var (`lineage`), which makes Feast use the project name directly as the namespace
+- **Fix**: Set Feast project name to the `OPENLINEAGE_NAMESPACE` env var (`fkm`), which makes Feast use the project name directly as the namespace
 
 ### 6.6 S3 URI scheme mismatch
 - **Symptom**: Spark dataset namespace showing `s3a://raw-data` while other tools use `s3://raw-data`
@@ -496,13 +496,13 @@ practice-mlops/
 ### Rebuild fkm-app image
 ```bash
 cd practice-mlops
-oc start-build fkm-app --from-dir=. --follow -n lineage
+oc start-build fkm-app --from-dir=. --follow -n fkm
 ```
 
 ### Rebuild spark-etl image
 ```bash
 cd practice-mlops
-oc start-build spark-etl --from-dir=. --follow -n lineage
+oc start-build spark-etl --from-dir=. --follow -n fkm
 ```
 
 ### Recompile pipeline
@@ -517,19 +517,19 @@ Upload `customer_churn_pipeline.yaml` via the OpenShift AI Data Science Pipeline
 ### Clean Marquez (for fresh runs)
 Use the Marquez API to soft-delete jobs and datasets in each namespace before re-running:
 ```bash
-MARQUEZ="http://marquez-lineage.apps.<cluster-domain>"
-curl -sL -X DELETE "$MARQUEZ/api/v1/namespaces/lineage/jobs/<job-name>"
+MARQUEZ="http://marquez-fkm.apps.<cluster-domain>"
+curl -sL -X DELETE "$MARQUEZ/api/v1/namespaces/fkm/jobs/<job-name>"
 curl -sL -X DELETE "$MARQUEZ/api/v1/namespaces/<encoded-namespace>/datasets/<encoded-dataset>"
 ```
 
 ### Container image locations
 | Image | Registry |
 |---|---|
-| fkm-app | `image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest` |
-| spark-etl | `image-registry.openshift-image-registry.svc:5000/lineage/spark-etl:latest` |
-| Marquez | `quay.io/rh_et_wd/lineage/marquez` |
-| Marquez Web | `quay.io/rh_et_wd/lineage/marquez-web` |
-| OL SDK | `quay.io/rh_et_wd/lineage/sdk:latest` |
+| fkm-app | `image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest` |
+| spark-etl | `image-registry.openshift-image-registry.svc:5000/fkm/spark-etl:latest` |
+| Marquez | `quay.io/rh_et_wd/fkm/marquez` |
+| Marquez Web | `quay.io/rh_et_wd/fkm/marquez-web` |
+| OL SDK | `quay.io/rh_et_wd/fkm/sdk:latest` |
 
 ---
 

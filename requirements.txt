@@ -38,6 +38,11 @@ great-expectations>=1.0.0,<2
 python-dotenv>=1.0.0,<2
 PyYAML>=6.0,<7
 
+# Security / provenance / policy (churn pipeline guards)
+rdflib>=7.0.0,<8
+PyJWT[crypto]>=2.8.0,<3
+cryptography>=42.0.0,<45
+
 # RAG / Vector DB
 sentence-transformers>=2.2.0,<3
 pymilvus>=2.3.0,<3

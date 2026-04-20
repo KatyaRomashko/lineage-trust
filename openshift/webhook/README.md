@@ -63,7 +63,7 @@ This is the **Platform Engineering** approach to data lineage. Developers declar
 
 ### 2. Webhook Server
 
-**Service**: `lineage-webhook.lineage.svc`
+**Service**: `lineage-webhook.fkm.svc`
 
 - Mutating admission webhook
 - Injects initContainer when pod has label `lineage-enabled: "true"`
@@ -124,7 +124,7 @@ from openlineage.client.run import Dataset, RunEvent, RunState
 client = OpenLineageClient(url="http://marquez")
 client.emit(RunEvent(
     eventType=RunState.COMPLETE,
-    job=Job(namespace="lineage", name="rag-inference"),
+    job=Job(namespace="fkm", name="rag-inference"),
     inputs=[
         Dataset(namespace="milvus://milvus:19530", name="ml_docs"),
         Dataset(namespace="feast://feast", name="user_context_features"),
@@ -172,7 +172,7 @@ oc start-build lineage-webhook --from-dir=. --follow
 ```bash
 cd openshift/webhook
 chmod +x generate-webhook-certs.sh
-./generate-webhook-certs.sh lineage
+./generate-webhook-certs.sh fkm
 ```
 
 **Save the CA Bundle output** - you'll need it in the next step.
@@ -184,7 +184,7 @@ chmod +x generate-webhook-certs.sh
 oc apply -f webhook-deployment.yaml
 
 # Wait for webhook to be ready
-oc wait --for=condition=available deployment/lineage-webhook -n lineage --timeout=60s
+oc wait --for=condition=available deployment/lineage-webhook -n fkm --timeout=60s
 ```
 
 ### Step 5: Create MutatingWebhookConfiguration
@@ -204,11 +204,11 @@ oc apply -f mutating-webhook-config.yaml
 oc apply -f examples/rag-inference-service.yaml
 
 # Check that the initContainer was injected
-oc get pod -n lineage -l app=rag-inference -o jsonpath='{.items[0].spec.initContainers[*].name}'
+oc get pod -n fkm -l app=rag-inference -o jsonpath='{.items[0].spec.initContainers[*].name}'
 # Should show: lineage-registration
 
 # Check the initContainer logs
-oc logs -n lineage -l app=rag-inference -c lineage-registration
+oc logs -n fkm -l app=rag-inference -c lineage-registration
 ```
 
 ## Usage for Developers
@@ -220,7 +220,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rag-service
-  namespace: lineage
+  namespace: fkm
 spec:
   template:
     metadata:
@@ -244,7 +244,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: feast-materialize
-  namespace: lineage
+  namespace: fkm
 spec:
   template:
     metadata:
@@ -299,10 +299,10 @@ Check that lineage events are being emitted:
 
 ```bash
 # View initContainer logs
-oc logs -n lineage deployment/rag-inference-service -c lineage-registration
+oc logs -n fkm deployment/rag-inference-service -c lineage-registration
 
 # Check Marquez UI
-oc get route marquez-web -n lineage -o jsonpath='{.spec.host}'
+oc get route marquez-web -n fkm -o jsonpath='{.spec.host}'
 # Browse to: https://<marquez-url> and search for your job name
 ```
 
@@ -312,29 +312,29 @@ oc get route marquez-web -n lineage -o jsonpath='{.spec.host}'
 
 ```bash
 # Check webhook is running
-oc get pods -n lineage -l app=lineage-webhook
+oc get pods -n fkm -l app=lineage-webhook
 
 # Check webhook logs
-oc logs -n lineage deployment/lineage-webhook
+oc logs -n fkm deployment/lineage-webhook
 
 # Verify MutatingWebhookConfiguration
 oc get mutatingwebhookconfiguration lineage-webhook
 
 # Check if annotation is correct
-oc get pod <pod-name> -n lineage -o yaml | grep -A5 annotations
+oc get pod <pod-name> -n fkm -o yaml | grep -A5 annotations
 ```
 
 ### InitContainer failing
 
 ```bash
 # Check initContainer logs
-oc logs <pod-name> -n lineage -c lineage-registration
+oc logs <pod-name> -n fkm -c lineage-registration
 
 # Verify Downward API volume is mounted
-oc get pod <pod-name> -n lineage -o yaml | grep -A10 "name: podinfo"
+oc get pod <pod-name> -n fkm -o yaml | grep -A10 "name: podinfo"
 
 # Check if Marquez is accessible
-oc exec <pod-name> -n lineage -c lineage-registration -- curl http://marquez/api/v1/namespaces
+oc exec <pod-name> -n fkm -c lineage-registration -- curl http://marquez/api/v1/namespaces
 ```
 
 ### Certificate issues
@@ -342,7 +342,7 @@ oc exec <pod-name> -n lineage -c lineage-registration -- curl http://marquez/api
 ```bash
 # Regenerate certificates
 cd openshift/webhook
-./generate-webhook-certs.sh lineage
+./generate-webhook-certs.sh fkm
 
 # Update the MutatingWebhookConfiguration with new CA bundle
 ```

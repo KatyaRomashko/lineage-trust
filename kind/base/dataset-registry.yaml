@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: registry-db-secret
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: dataset-registry
 type: Opaque
@@ -17,7 +17,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: registry-db
-  namespace: lineage
+  namespace: fkm
   labels:
     app: registry-db
     app.kubernetes.io/part-of: dataset-registry
@@ -70,7 +70,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: registry-db
-  namespace: lineage
+  namespace: fkm
   labels:
     app: registry-db
     app.kubernetes.io/part-of: dataset-registry
@@ -86,7 +86,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-api
     app.kubernetes.io/part-of: dataset-registry
@@ -163,7 +163,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-api
     app.kubernetes.io/part-of: dataset-registry
@@ -180,7 +180,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dataset-registry-api-nodeport
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-api
     app.kubernetes.io/part-of: dataset-registry
@@ -198,7 +198,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dataset-registry-ui
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-ui
     app.kubernetes.io/part-of: dataset-registry
@@ -234,7 +234,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dataset-registry-ui
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-ui
     app.kubernetes.io/part-of: dataset-registry
@@ -251,7 +251,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dataset-registry-ui-nodeport
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-ui
     app.kubernetes.io/part-of: dataset-registry

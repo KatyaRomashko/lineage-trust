@@ -25,7 +25,14 @@ RUN mkdir -p /opt/spark/jars && \
 COPY openlineage-oai/ /tmp/openlineage-oai/
 RUN pip3 install --no-cache-dir /tmp/openlineage-oai && rm -rf /tmp/openlineage-oai
 
+RUN pip3 install --no-cache-dir rdflib PyJWT cryptography httpx
+
 COPY src/etl/spark_etl.py /opt/spark/spark_etl.py
+COPY src/__init__.py /app/src/__init__.py
+COPY src/security /app/src/security
+COPY configs /app/configs
+
+ENV PYTHONPATH=/app
 
 USER 1001
 

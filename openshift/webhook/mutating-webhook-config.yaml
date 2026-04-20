@@ -14,7 +14,7 @@ webhooks:
     clientConfig:
       service:
         name: lineage-webhook
-        namespace: lineage
+        namespace: fkm
         path: "/mutate"
         port: 443
       # Replace CA_BUNDLE_PLACEHOLDER with actual CA bundle from generate-webhook-certs.sh

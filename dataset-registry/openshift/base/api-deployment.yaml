@@ -3,7 +3,7 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: dataset-registry
 
@@ -12,7 +12,7 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: dataset-registry
 spec:
@@ -32,7 +32,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-api
     app.kubernetes.io/part-of: dataset-registry
@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: image-registry.openshift-image-registry.svc:5000/lineage/dataset-registry-api:latest
+          image: image-registry.openshift-image-registry.svc:5000/fkm/dataset-registry-api:latest
           ports:
             - containerPort: 8080
           env:
@@ -101,7 +101,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dataset-registry-api
-  namespace: lineage
+  namespace: fkm
   labels:
     app: dataset-registry-api
     app.kubernetes.io/part-of: dataset-registry

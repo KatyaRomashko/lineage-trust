@@ -3,7 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mlflow-minio-pvc
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-minio
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -18,7 +18,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mlflow-minio
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-minio
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -85,7 +85,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mlflow-minio
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-minio
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -106,7 +106,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mlflow-minio-nodeport
-  namespace: lineage
+  namespace: fkm
   labels:
     app: mlflow-minio
     app.kubernetes.io/part-of: feast-kfp-mlflow

@@ -16,7 +16,7 @@ import time
 from kfp import compiler
 from kfp.client import Client
 
-NAMESPACE = "lineage"
+NAMESPACE = "fkm"
 DSPA_NAME = "dspa"
 PIPELINE_YAML = "customer_churn_pipeline.yaml"
 PIPELINE_NAME = "customer-churn-ml-pipeline"

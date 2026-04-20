@@ -2,7 +2,7 @@ apiVersion: datasciencepipelinesapplications.opendatahub.io/v1
 kind: DataSciencePipelinesApplication
 metadata:
   name: dspa
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 spec:
@@ -30,7 +30,7 @@ spec:
     externalStorage:
       basePath: ""
       bucket: pipeline-artifacts
-      host: mlflow-minio.lineage.svc:9000
+      host: mlflow-minio.fkm.svc:9000
       port: ""
       region: us-east-1
       scheme: http

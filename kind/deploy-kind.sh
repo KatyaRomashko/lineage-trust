@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 MODE="${1:-all}"
 CLUSTER_NAME="feast-kfp-mlflow"
-NAMESPACE="lineage"
+NAMESPACE="fkm"
 
 # ── Colours ──────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'

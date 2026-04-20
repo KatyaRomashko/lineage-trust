@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: minio-seed
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
     stage: "01-seed"
@@ -27,7 +27,7 @@ spec:
               echo "MinIO is up"
       containers:
         - name: seed
-          image: image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest
+          image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
           command:
             - sh
             - -c

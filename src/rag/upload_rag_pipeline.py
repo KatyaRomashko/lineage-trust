@@ -25,7 +25,7 @@ def upload_pipeline():
     # Get DSP endpoint from environment or use default
     dsp_endpoint = os.getenv(
         "DSP_ENDPOINT",
-        "https://ds-pipeline-dspa-lineage.apps.your-cluster.com",
+        "https://ds-pipeline-dspa-fkm.apps.your-cluster.com",
     )
 
     # Get authentication token (for OpenShift AI)
@@ -73,7 +73,7 @@ def upload_pipeline():
         print("  2. Check DSP_TOKEN is valid")
         print("  3. Ensure you have network access to the cluster")
         print("  4. Verify the Data Science Pipelines application is running:")
-        print("     kubectl get dspa -n lineage")
+        print("     kubectl get dspa -n fkm")
         sys.exit(1)
 
 

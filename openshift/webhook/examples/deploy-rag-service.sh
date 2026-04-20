@@ -2,7 +2,7 @@
 # Build and deploy the RAG inference service
 set -euo pipefail
 
-NAMESPACE=${1:-lineage}
+NAMESPACE=${1:-fkm}
 
 echo "Building and deploying RAG inference service to namespace: $NAMESPACE"
 

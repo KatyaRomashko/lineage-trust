@@ -97,7 +97,7 @@ Collection: ml_docs
 Once deployed, check configuration via the `/config` endpoint:
 
 ```bash
-ROUTE=$(oc get route rag-inference -n lineage -o jsonpath='{.spec.host}')
+ROUTE=$(oc get route rag-inference -n fkm -o jsonpath='{.spec.host}')
 curl https://$ROUTE/config | jq
 ```
 
@@ -142,17 +142,17 @@ Expected response:
 
 ```bash
 # Edit the ConfigMap
-oc edit configmap feast-config -n lineage
+oc edit configmap feast-config -n fkm
 
 # Restart pods to pick up changes
-oc rollout restart deployment/rag-inference-service -n lineage
+oc rollout restart deployment/rag-inference-service -n fkm
 ```
 
 ### To update environment variables:
 
 ```bash
 # Edit the deployment
-oc edit deployment rag-inference-service -n lineage
+oc edit deployment rag-inference-service -n fkm
 
 # Pods automatically restart with new values
 ```
@@ -163,14 +163,14 @@ oc edit deployment rag-inference-service -n lineage
 
 Check if feature_store.yaml is mounted:
 ```bash
-oc exec -n lineage deployment/rag-inference-service -- cat /app/feast_repo/feature_store.yaml
+oc exec -n fkm deployment/rag-inference-service -- cat /app/feast_repo/feature_store.yaml
 ```
 
 ### Can't connect to PostgreSQL
 
 Check if postgres service is accessible:
 ```bash
-oc exec -n lineage deployment/rag-inference-service -- \
+oc exec -n fkm deployment/rag-inference-service -- \
   curl -v telnet://postgres:5432
 ```
 
@@ -178,7 +178,7 @@ oc exec -n lineage deployment/rag-inference-service -- \
 
 Check if redis service is accessible:
 ```bash
-oc exec -n lineage deployment/rag-inference-service -- \
+oc exec -n fkm deployment/rag-inference-service -- \
   curl -v telnet://redis:6379
 ```
 
@@ -186,6 +186,6 @@ oc exec -n lineage deployment/rag-inference-service -- \
 
 Check if milvus service is accessible:
 ```bash
-oc exec -n lineage deployment/rag-inference-service -- \
+oc exec -n fkm deployment/rag-inference-service -- \
   curl -v telnet://milvus:19530
 ```

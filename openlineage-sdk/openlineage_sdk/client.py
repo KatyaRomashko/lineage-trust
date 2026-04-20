@@ -22,7 +22,7 @@ class OLClient:
 
     Reads configuration from environment variables by default:
         - OPENLINEAGE_URL: The OpenLineage API endpoint (e.g. "http://marquez")
-        - OPENLINEAGE_NAMESPACE: The namespace for jobs (e.g. "lineage")
+        - OPENLINEAGE_NAMESPACE: The namespace for jobs (e.g. "fkm")
         - DATASET_REGISTRY_URL: The Dataset Registry endpoint (optional)
 
     All can be overridden via constructor arguments.

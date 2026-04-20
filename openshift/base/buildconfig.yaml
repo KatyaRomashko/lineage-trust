@@ -4,7 +4,7 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: fkm-app
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 
@@ -14,7 +14,7 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: fkm-app
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 spec:
@@ -35,7 +35,7 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: spark-etl
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 
@@ -45,7 +45,7 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: spark-etl
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 spec:

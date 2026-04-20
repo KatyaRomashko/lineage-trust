@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 LINEAGE_INIT_IMAGE = os.getenv(
     "LINEAGE_INIT_IMAGE",
-    "image-registry.openshift-image-registry.svc:5000/lineage/lineage-init-container:latest"
+    "image-registry.openshift-image-registry.svc:5000/fkm/lineage-init-container:latest"
 )
 OPENLINEAGE_URL = os.getenv("OPENLINEAGE_URL", "http://marquez")
 

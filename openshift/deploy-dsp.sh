@@ -13,7 +13,7 @@
 # ═══════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-NAMESPACE="lineage"
+NAMESPACE="fkm"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STAGE="${1:-all}"
@@ -31,7 +31,7 @@ err()    { echo -e "${RED}[ERROR]${NC} $1"; }
 create_pipeline_bucket() {
     info "Ensuring 'pipeline-artifacts' bucket exists in MinIO ..."
     oc run minio-bucket-init --rm -i --restart=Never \
-        --image=image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest \
+        --image=image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest \
         -n "$NAMESPACE" -- python3 -c "
 from minio import Minio
 client = Minio('mlflow-minio:9000', access_key='minioadmin', secret_key='minioadmin123', secure=False)

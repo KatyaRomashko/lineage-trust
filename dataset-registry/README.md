@@ -146,7 +146,7 @@ cd openshift
 ./deploy.sh
 ```
 
-This creates BuildConfigs, ImageStreams, Deployments, Services, and Routes in the `lineage` namespace. The backend is built from `backend/` and the frontend from `frontend/` using binary builds.
+This creates BuildConfigs, ImageStreams, Deployments, Services, and Routes in the `fkm` namespace. The backend is built from `backend/` and the frontend from `frontend/` using binary builds.
 
 ### Local (Kind cluster)
 

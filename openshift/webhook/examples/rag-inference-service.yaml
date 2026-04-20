@@ -8,7 +8,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rag-inference-service
-  namespace: lineage
+  namespace: fkm
   labels:
     app: rag-inference
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -35,7 +35,7 @@ spec:
 
         # Feast online store for user features
         #ai.platform/input-1: "redis://redis:6379/customer_churn.customer_features_view"
-        ai.platform/input-1: "feast://lineage/online_store_customer_features_view"
+        ai.platform/input-1: "feast://fkm/online_store_customer_features_view"
         # Model artifacts (in production this would be loaded from MLflow/S3)
         ai.platform/input-2: "s3://mlflow-minio:9000/models/llama3-70b-rag-v1"
         
@@ -50,7 +50,7 @@ spec:
       containers:
         - name: rag-service
           # Real RAG service that queries Milvus and Feast
-          image: image-registry.openshift-image-registry.svc:5000/lineage/rag-inference-app:latest
+          image: image-registry.openshift-image-registry.svc:5000/fkm/rag-inference-app:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -104,7 +104,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: rag-inference
-  namespace: lineage
+  namespace: fkm
   labels:
     app: rag-inference
 spec:
@@ -122,7 +122,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: rag-inference
-  namespace: lineage
+  namespace: fkm
   labels:
     app: rag-inference
 spec:

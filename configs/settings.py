@@ -45,3 +45,17 @@ TIMESTAMP_COLUMN = "event_timestamp"
 
 # ── Thresholds ──────────────────────────────────────────────────────────
 MODEL_ROC_AUC_THRESHOLD = float(os.getenv("MODEL_ROC_AUC_THRESHOLD", "0.70"))
+
+# ── Security (SPIFFE, OPA, Rekor, PROV-O, EU compliance) ─────────────────
+AGENT_ID = os.getenv("AGENT_ID", "spiffe://example.org/ns/churn/pipeline-agent")
+OPA_URL = os.getenv("OPA_URL", "http://localhost:8181")
+OPA_STRICT = os.getenv("OPA_STRICT", "1") == "1"
+REKOR_URL = os.getenv("REKOR_URL", "https://rekor.sigstore.dev")
+REKOR_UPLOAD = os.getenv("REKOR_UPLOAD", "0") == "1"
+SPIFFE_JWT_PATH = os.getenv("SPIFFE_JWT_PATH", "")
+SPIFFE_REQUIRED = os.getenv("SPIFFE_REQUIRED", "0") == "1"
+PROV_OUTPUT_DIR = os.getenv("PROV_OUTPUT_DIR", "/tmp/prov-o")
+TRANSPARENCY_LOG_PATH = os.getenv("TRANSPARENCY_LOG_PATH", "/tmp/audit/transparency.jsonl")
+REGIONAL_POLICY = os.getenv("REGIONAL_POLICY", "NON_EU")
+LLM_TRACE_ID = os.getenv("LLM_TRACE_ID", "")
+LLM_MONITORING_TOOL = os.getenv("LLM_MONITORING_TOOL", "langsmith")

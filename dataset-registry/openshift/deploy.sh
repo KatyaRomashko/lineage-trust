@@ -10,7 +10,7 @@
 # ===================================================================
 set -euo pipefail
 
-NAMESPACE="lineage"
+NAMESPACE="fkm"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STAGE="${1:-all}"

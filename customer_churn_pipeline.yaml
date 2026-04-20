@@ -237,7 +237,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-ds-evaluation:
       container:
         args:
@@ -277,7 +277,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-ds-feature-engineering:
       container:
         args:
@@ -321,7 +321,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-ds-model-registration:
       container:
         args:
@@ -380,7 +380,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-ds-model-training:
       container:
         args:
@@ -460,7 +460,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-platform-feast-apply:
       container:
         args:
@@ -518,7 +518,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-platform-feast-materialize:
       container:
         args:
@@ -573,7 +573,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/fkm-app:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
     exec-platform-spark-etl:
       container:
         args:
@@ -626,7 +626,7 @@ deploymentSpec:
         env:
         - name: OPENLINEAGE_PARENT_JOB_NAME
           value: customer-churn-ml-pipeline
-        image: image-registry.openshift-image-registry.svc:5000/lineage-ben/spark-etl:latest
+        image: image-registry.openshift-image-registry.svc:5000/fkm/spark-etl:latest
 pipelineInfo:
   description: 'End-to-end churn prediction pipeline. PLATFORM steps: Spark ETL, Feast
     apply & materialize (managed by infra). DS steps: data extraction, feature engineering,

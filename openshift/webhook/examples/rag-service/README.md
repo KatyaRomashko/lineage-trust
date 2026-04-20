@@ -50,7 +50,7 @@ cd rag-service
 oc apply -f ../rag-service-buildconfig.yaml
 
 # Build the image
-oc start-build rag-inference-app -n lineage --from-dir=. --follow
+oc start-build rag-inference-app -n fkm --from-dir=. --follow
 ```
 
 ### Step 3: Deploy the service
@@ -66,10 +66,10 @@ oc apply -f rag-inference-service.yaml
 
 ```bash
 # Wait for pods to be ready
-oc wait --for=condition=ready pod -l app=rag-inference -n lineage --timeout=120s
+oc wait --for=condition=ready pod -l app=rag-inference -n fkm --timeout=120s
 
 # Get the route
-ROUTE=$(oc get route rag-inference -n lineage -o jsonpath='{.spec.host}')
+ROUTE=$(oc get route rag-inference -n fkm -o jsonpath='{.spec.host}')
 
 # Test health endpoint
 curl https://$ROUTE/health
@@ -193,7 +193,7 @@ The service has lineage automatically tracked via webhook:
 
 View in Marquez UI:
 ```bash
-oc get route marquez-web -n lineage -o jsonpath='{.spec.host}'
+oc get route marquez-web -n fkm -o jsonpath='{.spec.host}'
 # Search for: rag-inference-service
 ```
 

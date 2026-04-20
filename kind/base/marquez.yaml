@@ -3,7 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: marquez-db-pvc
-  namespace: lineage
+  namespace: fkm
   labels:
     app: marquez-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -18,7 +18,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: marquez-db-secret
-  namespace: lineage
+  namespace: fkm
   labels:
     app: marquez-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -33,7 +33,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: marquez
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: marquez
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -46,7 +46,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: marquez-config
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: marquez
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -84,7 +84,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: marquez-db
-  namespace: lineage
+  namespace: fkm
   labels:
     app: marquez-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -161,7 +161,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: marquez-db
-  namespace: lineage
+  namespace: fkm
   labels:
     app: marquez-db
     app.kubernetes.io/part-of: feast-kfp-mlflow
@@ -177,7 +177,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: marquez
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: marquez
     app.kubernetes.io/name: marquez
@@ -262,7 +262,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: marquez
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: marquez
     app.kubernetes.io/name: marquez
@@ -281,7 +281,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: marquez-web
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: web
     app.kubernetes.io/name: marquez
@@ -329,7 +329,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: marquez-web
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: web
     app.kubernetes.io/name: marquez
@@ -349,7 +349,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: marquez-web-nodeport
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/component: web
     app.kubernetes.io/name: marquez

@@ -17,10 +17,10 @@ from kfp import kubernetes
 # The fkm-app image built via OpenShift BuildConfig contains all deps.
 # Override at pipeline-creation time via the `image` parameter.
 FKM_IMAGE = (
-    "image-registry.openshift-image-registry.svc:5000/lineage/fkm-app:latest"
+    "image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest"
 )
 SPARK_IMAGE = (
-    "image-registry.openshift-image-registry.svc:5000/lineage/spark-etl:latest"
+    "image-registry.openshift-image-registry.svc:5000/fkm/spark-etl:latest"
 )
 
 
@@ -38,6 +38,7 @@ def platform_spark_etl(
     openlineage_url: str,
     aws_access_key: str,
     aws_secret_key: str,
+    agent_id: str,
 ) -> str:
     """PySpark ETL that reads CSV from MinIO, transforms, writes to PostgreSQL.
     The OpenLineage Spark listener emits lineage events automatically.
@@ -45,6 +46,20 @@ def platform_spark_etl(
     import os
     import subprocess
     from openlineage_oai.adapters.kfp import kfp_lineage
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="platform_spark_etl",
+        activity_label="Spark ETL (MinIO CSV → PostgreSQL warehouse)",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[
+            {"label": "s3://raw-data/customers.csv"},
+        ],
+        generated_entities=[
+            {"label": f"postgres://{pg_host}:5432/{pg_database}.{warehouse_table}"},
+        ],
+    )
 
     os.environ["MINIO_ENDPOINT"] = minio_endpoint
     os.environ["PG_HOST"] = pg_host
@@ -71,6 +86,11 @@ def platform_spark_etl(
             print(f"STDERR: {result.stderr}")
             raise RuntimeError(f"Spark ETL failed: {result.stderr[:500]}")
         print("Platform: spark ETL succeeded")
+    finalize_step_audit(
+        step_name="platform_spark_etl",
+        context=sec,
+        result_summary={"status": "etl_done"},
+    )
     return "etl_done"
 
 
@@ -82,11 +102,22 @@ def platform_feast_apply(
     feast_repo_path: str,
     pg_host: str,
     redis_host: str,
+    agent_id: str,
 ) -> str:
     """Run feast apply to register feature definitions. Emits OpenLineage events."""
     import os
     import subprocess
     from openlineage_oai.adapters.kfp import kfp_lineage
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="platform_feast_apply",
+        activity_label="Feast apply (registry + feature views)",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": "warehouse.customer_features"}],
+        generated_entities=[{"label": "warehouse.customer_features_view"}],
+    )
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     feast_project = ol_namespace.replace("-", "_")
@@ -145,6 +176,11 @@ openlineage:
             print(f"STDERR: {result.stderr}")
             raise RuntimeError(f"feast apply failed: {result.stderr[:500]}")
         print("Platform: feast apply succeeded")
+    finalize_step_audit(
+        step_name="platform_feast_apply",
+        context=sec,
+        result_summary={"status": "applied"},
+    )
     return "applied"
 
 
@@ -157,12 +193,23 @@ def platform_feast_materialize(
     pg_host: str,
     redis_host: str,
     apply_done: str,
+    agent_id: str,
 ) -> str:
     """Materialize features from offline to online store. Emits OpenLineage events."""
     import os
     from datetime import datetime, timedelta
     from feast import FeatureStore
     from openlineage_oai.adapters.kfp import kfp_lineage
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="platform_feast_materialize",
+        activity_label="Feast materialize (offline → online store)",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": "warehouse.customer_features"}],
+        generated_entities=[{"label": "redis:online_store"}],
+    )
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     feast_project = ol_namespace.replace("-", "_")
@@ -209,6 +256,11 @@ openlineage:
         print(f"Materializing features {start.isoformat()} -> {end.isoformat()}")
         store.materialize(start_date=start, end_date=end)
         print("Platform: feast materialize succeeded")
+    finalize_step_audit(
+        step_name="platform_feast_materialize",
+        context=sec,
+        result_summary={"status": "materialized"},
+    )
     return "materialized"
 
 
@@ -223,6 +275,7 @@ def ds_data_extraction(
     pg_host: str,
     redis_host: str,
     materialize_done: str,
+    agent_id: str,
     output_path: dsl.Output[dsl.Dataset],
 ) -> None:
     """Retrieve historical features from Feast and save as parquet."""
@@ -232,6 +285,16 @@ def ds_data_extraction(
     from sqlalchemy import create_engine, text
     from feast import FeatureStore
     from openlineage_oai.adapters.kfp import kfp_lineage, kfp_output_with_schema
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="ds_data_extraction",
+        activity_label="Feast historical feature extraction",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": "warehouse.customer_features_view"}],
+        generated_entities=[{"label": "parquet:extracted_features"}],
+    )
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
     feast_project = ol_namespace.replace("-", "_")
@@ -310,6 +373,11 @@ openlineage:
         print(f"DS: data extraction complete - shape {result.shape}")
         result.to_parquet(output_path.path)
         run.add_output(kfp_output_with_schema(output_path, result))
+    finalize_step_audit(
+        step_name="ds_data_extraction",
+        context=sec,
+        result_summary={"rows": int(result.shape[0])},
+    )
 
 
 # =======================================================================
@@ -318,12 +386,30 @@ openlineage:
 @dsl.component(base_image=FKM_IMAGE)
 def ds_feature_engineering(
     dataset: dsl.Input[dsl.Dataset],
+    agent_id: str,
+    regional_policy: str,
+    llm_trace_id: str,
+    llm_monitoring_tool: str,
+    modify_original_date: bool,
+    hours_deviation: float,
     output_path: dsl.Output[dsl.Dataset],
 ) -> None:
-    """Add derived features."""
+    """Add derived features; optional Original_Date change under OPA; EU reasoning_hash."""
     import numpy as np
     import pandas as pd
     from openlineage_oai.adapters.kfp import kfp_lineage, kfp_output_with_schema
+    from src.security.eu_compliance import eu_date_metadata_columns
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+    from src.security.opa_client import evaluate_churn_policy
+
+    sec = pipeline_step_guard(
+        step_name="ds_feature_engineering",
+        activity_label="Feature engineering (derived columns)",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": str(dataset.path)}],
+        generated_entities=[{"label": "parquet:engineered_features"}],
+    )
 
     with kfp_lineage(
         "kfp-feature_engineering",
@@ -332,6 +418,42 @@ def ds_feature_engineering(
         url="http://marquez",
     ) as run:
         df = pd.read_parquet(dataset.path)
+        old_ts = str(df["event_timestamp"].min())
+
+        if modify_original_date:
+            allowed = evaluate_churn_policy(
+                {
+                    "action": "modify_original_date",
+                    "regional_policy": regional_policy,
+                    "hours_deviation": float(hours_deviation),
+                    "agent_id": agent_id,
+                },
+            )
+            if not allowed:
+                raise PermissionError(
+                    "OPA denied modify_original_date "
+                    f"(regional_policy={regional_policy!r}, "
+                    f"hours_deviation={hours_deviation!r})",
+                )
+            delta = pd.Timedelta(hours=float(hours_deviation))
+            df["event_timestamp"] = pd.to_datetime(
+                df["event_timestamp"], utc=True,
+            ) + delta
+
+        new_ts = str(df["event_timestamp"].min())
+
+        if regional_policy.upper() == "EU":
+            meta = eu_date_metadata_columns(
+                regional_policy=regional_policy,
+                llm_trace_id=llm_trace_id,
+                monitoring_tool=llm_monitoring_tool,
+                old_iso=old_ts,
+                new_iso=new_ts,
+                agent_id=agent_id,
+            )
+            for k, v in meta.items():
+                df[k] = v
+
         tenure_safe = df["tenure_months"].replace(0, 1)
         df["charges_per_month"] = df["total_charges"] / tenure_safe
         df["ticket_rate"] = df["num_support_tickets"] / tenure_safe
@@ -342,6 +464,15 @@ def ds_feature_engineering(
         print(f"DS: feature engineering complete - shape {df.shape}")
         df.to_parquet(output_path.path)
         run.add_output(kfp_output_with_schema(output_path, df))
+    finalize_step_audit(
+        step_name="ds_feature_engineering",
+        context=sec,
+        result_summary={
+            "modify_original_date": modify_original_date,
+            "regional_policy": regional_policy,
+            "eu_compliance_columns": regional_policy.upper() == "EU",
+        },
+    )
 
 
 # =======================================================================
@@ -355,6 +486,7 @@ def ds_model_training(
     s3_endpoint: str,
     aws_key: str,
     aws_secret: str,
+    agent_id: str,
 ) -> str:
     """Train XGBoost, log to MLflow. Returns JSON with run_id, model_uri, metrics."""
     import json
@@ -373,6 +505,16 @@ def ds_model_training(
     )
     from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import LabelEncoder
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="ds_model_training",
+        activity_label="XGBoost training + MLflow logging",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": str(dataset.path)}],
+        generated_entities=[{"label": "mlflow:model"}],
+    )
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
 
@@ -445,22 +587,38 @@ def ds_model_training(
             info = mlflow.sklearn.log_model(model, artifact_path="model")
 
             print(f"DS: model training complete - metrics: {metrics}")
-            return json.dumps({
+            out = json.dumps({
                 "run_id": run.info.run_id,
                 "model_uri": info.model_uri,
                 "metrics": metrics,
             })
+    finalize_step_audit(
+        step_name="ds_model_training",
+        context=sec,
+        result_summary={"ok": True},
+    )
+    return out
 
 
 # =======================================================================
 # DS - Evaluation
 # =======================================================================
 @dsl.component(base_image=FKM_IMAGE)
-def ds_evaluation(train_result_json: str) -> str:
+def ds_evaluation(train_result_json: str, agent_id: str) -> str:
     """Display and return evaluation metrics."""
     import json
     import os
     from openlineage_oai.adapters.kfp import kfp_lineage
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="ds_evaluation",
+        activity_label="Model evaluation summary",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": "mlflow:train_metrics"}],
+        generated_entities=[{"label": "metrics:evaluation"}],
+    )
 
     ol_namespace = os.environ.get("OPENLINEAGE_NAMESPACE", "default")
 
@@ -476,7 +634,13 @@ def ds_evaluation(train_result_json: str) -> str:
             f"DS: evaluation  ROC-AUC={m['roc_auc']:.4f}  F1={m['f1']:.4f}  "
             f"Precision={m['precision']:.4f}  Recall={m['recall']:.4f}"
         )
-        return json.dumps(m)
+        out = json.dumps(m)
+    finalize_step_audit(
+        step_name="ds_evaluation",
+        context=sec,
+        result_summary={"ok": True},
+    )
+    return out
 
 
 # =======================================================================
@@ -492,6 +656,7 @@ def ds_model_registration(
     aws_key: str,
     aws_secret: str,
     roc_auc_threshold: float,
+    agent_id: str,
 ) -> str:
     """Register model in MLflow if metrics beat the threshold."""
     import json
@@ -500,6 +665,16 @@ def ds_model_registration(
     import mlflow
     from mlflow.tracking import MlflowClient
     from openlineage_oai.adapters.kfp import kfp_lineage
+    from src.security.guards import finalize_step_audit, pipeline_step_guard
+
+    sec = pipeline_step_guard(
+        step_name="ds_model_registration",
+        activity_label="MLflow model registration / alias",
+        agent_id=agent_id,
+        opa_input=None,
+        used_entities=[{"label": "mlflow:model_candidate"}],
+        generated_entities=[{"label": f"mlflow:registered:{model_name}"}],
+    )
 
     os.environ["MLFLOW_S3_ENDPOINT_URL"] = s3_endpoint
     os.environ["AWS_ACCESS_KEY_ID"] = aws_key
@@ -521,23 +696,29 @@ def ds_model_registration(
 
         if metrics["roc_auc"] < roc_auc_threshold:
             print(f"DS: model registration  ROC-AUC {metrics['roc_auc']:.4f} < {roc_auc_threshold} - skipping")
-            return json.dumps({"registered": False, "reason": "below_threshold"})
-
-        mlflow.set_tracking_uri(tracking_uri)
-        try:
-            mv = mlflow.register_model(model_uri=result["model_uri"], name=model_name)
-            client = MlflowClient()
-            client.set_registered_model_alias(model_name, "champion", str(mv.version))
-            print(f"DS: registered {model_name} v{mv.version} as alias 'champion'")
-            return json.dumps({
-                "registered": True,
-                "model_name": model_name,
-                "version": int(mv.version),
-                "alias": "champion",
-            })
-        except Exception as e:
-            print(f"DS: model registration failed (non-fatal): {e}")
-            return json.dumps({"registered": False, "reason": str(e)[:200]})
+            out = json.dumps({"registered": False, "reason": "below_threshold"})
+        else:
+            mlflow.set_tracking_uri(tracking_uri)
+            try:
+                mv = mlflow.register_model(model_uri=result["model_uri"], name=model_name)
+                client = MlflowClient()
+                client.set_registered_model_alias(model_name, "champion", str(mv.version))
+                print(f"DS: registered {model_name} v{mv.version} as alias 'champion'")
+                out = json.dumps({
+                    "registered": True,
+                    "model_name": model_name,
+                    "version": int(mv.version),
+                    "alias": "champion",
+                })
+            except Exception as e:
+                print(f"DS: model registration failed (non-fatal): {e}")
+                out = json.dumps({"registered": False, "reason": str(e)[:200]})
+    finalize_step_audit(
+        step_name="ds_model_registration",
+        context=sec,
+        result_summary={"registered": json.loads(out).get("registered", False)},
+    )
+    return out
 
 
 # =======================================================================
@@ -550,7 +731,9 @@ def ds_model_registration(
         "PLATFORM steps: Spark ETL, Feast apply & materialize (managed by infra). "
         "DS steps: data extraction, feature engineering, "
         "XGBoost training, evaluation, MLflow registration (owned by data scientists). "
-        "OPENLINEAGE_NAMESPACE is injected by the Argo workflow controller."
+        "OPENLINEAGE_NAMESPACE is injected by the Argo workflow controller. "
+        "Security: PROV-O lineage, SPIFFE/SPIRE JWT authorization, OPA/Rego, "
+        "signed transparency log (optional Rekor), EU date compliance metadata."
     ),
 )
 def customer_churn_pipeline(
@@ -566,6 +749,18 @@ def customer_churn_pipeline(
     aws_key: str = "minioadmin",
     aws_secret: str = "minioadmin123",
     roc_auc_threshold: float = 0.70,
+    # Security / compliance (SPIFFE, OPA, Rekor, EU metadata)
+    agent_id: str = "spiffe://example.org/ns/churn/pipeline-agent",
+    spiffe_dev_identity_json: str = '{"sub": "spiffe://example.org/ns/churn/pipeline-agent"}',
+    opa_url: str = "http://opa:8181",
+    opa_strict: bool = True,
+    rekor_upload: bool = False,
+    spiffe_required: bool = False,
+    regional_policy: str = "NON_EU",
+    llm_trace_id: str = "",
+    llm_monitoring_tool: str = "langsmith",
+    modify_original_date: bool = False,
+    hours_deviation: float = 0.0,
 ):
     # -- PLATFORM STEPS (managed by infrastructure) ----------------------
 
@@ -579,6 +774,7 @@ def customer_churn_pipeline(
         openlineage_url="http://marquez",
         aws_access_key=aws_key,
         aws_secret_key=aws_secret,
+        agent_id=agent_id,
     )
     etl_task.set_caching_options(False)
 
@@ -586,6 +782,7 @@ def customer_churn_pipeline(
         feast_repo_path=feast_repo_path,
         pg_host=pg_host,
         redis_host=redis_host,
+        agent_id=agent_id,
     )
     apply_task.after(etl_task)
     apply_task.set_caching_options(False)
@@ -595,6 +792,7 @@ def customer_churn_pipeline(
         pg_host=pg_host,
         redis_host=redis_host,
         apply_done=apply_task.output,
+        agent_id=agent_id,
     )
     materialize_task.set_caching_options(False)
 
@@ -607,11 +805,18 @@ def customer_churn_pipeline(
         pg_host=pg_host,
         redis_host=redis_host,
         materialize_done=materialize_task.output,
+        agent_id=agent_id,
     )
     extract_task.set_caching_options(False)
 
     engineer_task = ds_feature_engineering(
         dataset=extract_task.outputs["output_path"],
+        agent_id=agent_id,
+        regional_policy=regional_policy,
+        llm_trace_id=llm_trace_id,
+        llm_monitoring_tool=llm_monitoring_tool,
+        modify_original_date=modify_original_date,
+        hours_deviation=hours_deviation,
     )
     engineer_task.set_caching_options(False)
 
@@ -622,11 +827,13 @@ def customer_churn_pipeline(
         s3_endpoint=s3_endpoint,
         aws_key=aws_key,
         aws_secret=aws_secret,
+        agent_id=agent_id,
     )
     train_task.set_caching_options(False)
 
     eval_task = ds_evaluation(
         train_result_json=train_task.output,
+        agent_id=agent_id,
     )
     eval_task.set_caching_options(False)
 
@@ -639,6 +846,7 @@ def customer_churn_pipeline(
         aws_key=aws_key,
         aws_secret=aws_secret,
         roc_auc_threshold=roc_auc_threshold,
+        agent_id=agent_id,
     )
     reg_task.set_caching_options(False)
 
@@ -655,6 +863,11 @@ def customer_churn_pipeline(
         task.set_env_variable(
             "OPENLINEAGE_PARENT_JOB_NAME", "customer-churn-ml-pipeline",
         )
+        task.set_env_variable("SPIFFE_DEV_IDENTITY_JSON", spiffe_dev_identity_json)
+        task.set_env_variable("OPA_URL", opa_url)
+        task.set_env_variable("OPA_STRICT", "1" if opa_strict else "0")
+        task.set_env_variable("REKOR_UPLOAD", "1" if rekor_upload else "0")
+        task.set_env_variable("SPIFFE_REQUIRED", "1" if spiffe_required else "0")
 
 
 # =======================================================================

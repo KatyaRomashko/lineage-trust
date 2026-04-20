@@ -24,7 +24,7 @@ data:
             fieldPath: metadata.namespace
 ```
 
-This means every KFP step pod automatically gets `OPENLINEAGE_NAMESPACE` set to its Kubernetes namespace (e.g. `lineage`). No pipeline code touches this value.
+This means every KFP step pod automatically gets `OPENLINEAGE_NAMESPACE` set to its Kubernetes namespace (e.g. `fkm`). No pipeline code touches this value.
 
 ### How each tool reads it
 
@@ -80,9 +80,9 @@ Document `postgres://` as the canonical OpenLineage namespace scheme for Postgre
 
 ### The behaviour
 
-When Feast emits OpenLineage events, it constructs the namespace as `{configured_namespace}/{feast_project_name}`. For example, with `OPENLINEAGE_NAMESPACE=lineage` and a Feast project named `customer_churn`, Feast emits to `lineage/customer_churn`.
+When Feast emits OpenLineage events, it constructs the namespace as `{configured_namespace}/{feast_project_name}`. For example, with `OPENLINEAGE_NAMESPACE=fkm` and a Feast project named `customer_churn`, Feast emits to `fkm/customer_churn`.
 
-This means Feast jobs and datasets live in a different OL namespace (`lineage/customer_churn`) than Spark and MLflow jobs (which use `lineage` directly).
+This means Feast jobs and datasets live in a different OL namespace (`fkm/customer_churn`) than Spark and MLflow jobs (which use `fkm` directly).
 
 ### Why this is correct
 
@@ -92,8 +92,8 @@ The split namespaces reflect this separation:
 
 | Namespace | Contents | Owner |
 |---|---|---|
-| `lineage` | Spark ETL jobs, MLflow training jobs, model artifacts | Data science pipeline |
-| `lineage/customer_churn` | Feast feature views, entity definitions, online store materialisation | Platform/infrastructure |
+| `fkm` | Spark ETL jobs, MLflow training jobs, model artifacts | Data science pipeline |
+| `fkm/customer_churn` | Feast feature views, entity definitions, online store materialisation | Platform/infrastructure |
 | `postgres://postgres:5432` | Physical PostgreSQL datasets (shared between tools) | Derived from storage authority |
 
 The lineage graph still connects across namespaces through shared dataset identities. When Spark writes to `postgres://postgres:5432/warehouse.customer_features` and MLflow reads from the same dataset identity, Marquez links them regardless of job namespace.

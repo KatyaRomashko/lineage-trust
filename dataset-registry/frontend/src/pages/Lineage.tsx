@@ -20,7 +20,7 @@ declare global {
 
 const MARQUEZ_WEB =
   window.MARQUEZ_WEB_URL ||
-  "https://marquez-web-lineage.apps.rosa.catoconn-ray-et.bo0z.p3.openshiftapps.com";
+  "https://marquez-web-fkm.apps.rosa.catoconn-ray-et.bo0z.p3.openshiftapps.com";
 
 export default function Lineage() {
   const [searchParams] = useSearchParams();

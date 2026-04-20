@@ -13,10 +13,10 @@ We patch the Argo workflow controller's ConfigMap directly:
 
 ```bash
 kubectl patch configmap ds-pipeline-workflow-controller-dspa \
-  -n lineage --type merge \
+  -n fkm --type merge \
   --patch-file openshift/dsp/workflow-controller-patch.yaml
 
-kubectl rollout restart deployment/ds-pipeline-workflow-controller-dspa -n lineage
+kubectl rollout restart deployment/ds-pipeline-workflow-controller-dspa -n fkm
 ```
 
 This adds a `mainContainer` section with a Kubernetes Downward API

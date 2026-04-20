@@ -129,7 +129,7 @@ This generates `rag_ingestion_pipeline.yaml` in the project root.
 
 **Option 1: Via Script**
 ```bash
-export DSP_ENDPOINT="https://ds-pipeline-dspa-lineage.apps.your-cluster.com"
+export DSP_ENDPOINT="https://ds-pipeline-dspa-fkm.apps.your-cluster.com"
 export DSP_TOKEN="your-token-here"
 python -m src.rag.upload_rag_pipeline
 ```
@@ -170,7 +170,7 @@ python -m src.rag.query "What is MLOps?" --collection ml_docs --top-k 5
 ### Port-forward for Local Queries
 
 ```bash
-kubectl port-forward -n lineage svc/postgres 5432:5432
+kubectl port-forward -n fkm svc/postgres 5432:5432
 python -m src.rag.query "Explain feature stores" --pg-host localhost
 ```
 
@@ -224,7 +224,7 @@ The pipeline automatically tracks:
 
 ### Jobs
 - **Job Name**: `rag_store_vectordb`
-- **Namespace**: Injected automatically via Argo controller (e.g., `lineage`)
+- **Namespace**: Injected automatically via Argo controller (e.g., `fkm`)
 - **Run ID**: UUID generated during execution
 
 ### Metadata Captured
@@ -236,11 +236,11 @@ The pipeline automatically tracks:
 ### Lineage Graph
 View in Marquez UI:
 ```bash
-kubectl port-forward -n lineage svc/marquez-web 3000:3000
+kubectl port-forward -n fkm svc/marquez-web 3000:3000
 open http://localhost:3000
 ```
 
-Navigate to the `lineage` namespace to see:
+Navigate to the `fkm` namespace to see:
 - Job runs and status
 - Dataset dependencies
 - Complete data lineage graph
@@ -340,7 +340,7 @@ scores = reranker.predict([(query, doc) for doc in results])
 kubectl apply -f openshift/jobs/00-setup-pgvector.yaml
 
 # Verify
-kubectl exec -n lineage -it postgres-0 -- \
+kubectl exec -n fkm -it postgres-0 -- \
   psql -U feast -d warehouse -c "SELECT * FROM pg_extension WHERE extname='vector';"
 ```
 

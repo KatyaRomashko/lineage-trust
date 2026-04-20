@@ -3,7 +3,7 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: rag-inference-app
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 
@@ -12,7 +12,7 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: rag-inference-app
-  namespace: lineage
+  namespace: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
 spec:

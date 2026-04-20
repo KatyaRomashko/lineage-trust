@@ -20,7 +20,7 @@ Lineage tracking is simple and direct:
 
 - OpenShift cluster with OpenShift AI installed
 - `oc` CLI configured and logged in
-- Project/namespace: `lineage`
+- Project/namespace: `fkm`
 
 ## Step 1: Setup PostgreSQL with pgvector
 
@@ -40,8 +40,8 @@ The current deployment uses `quay.io/sclorg/postgresql-15-c9s`. You'll need to b
 For quick testing with standard PostgreSQL:
 ```bash
 # Replace image in postgres deployment
-oc set image deployment/postgres postgres=postgres:16 -n lineage
-oc rollout restart deployment/postgres -n lineage
+oc set image deployment/postgres postgres=postgres:16 -n fkm
+oc rollout restart deployment/postgres -n fkm
 
 # Install pgvector extension
 oc apply -f openshift/jobs/00-setup-pgvector.yaml
@@ -53,7 +53,7 @@ Upload the sample ML/MLOps documentation to MinIO:
 
 ```bash
 oc apply -f openshift/jobs/07-rag-seed-docs.yaml
-oc logs -f job/rag-seed-docs -n lineage
+oc logs -f job/rag-seed-docs -n fkm
 ```
 
 This uploads:
@@ -73,7 +73,7 @@ Add RAG dependencies to your application image:
 # - torch
 
 # Rebuild image (for OpenShift)
-oc start-build fkm-app -n lineage --follow
+oc start-build fkm-app -n fkm --follow
 ```
 
 ## Step 4: Compile the RAG Pipeline
@@ -97,7 +97,7 @@ This creates `rag_ingestion_pipeline.yaml` in your project root.
 
 **Via API (if DSP endpoint is exposed):**
 ```bash
-export DSP_ENDPOINT="https://ds-pipeline-dspa-lineage.apps.your-cluster.com"
+export DSP_ENDPOINT="https://ds-pipeline-dspa-fkm.apps.your-cluster.com"
 export DSP_TOKEN=$(oc whoami -t)
 python -m src.rag.upload_rag_pipeline
 ```
@@ -131,13 +131,13 @@ Total runtime: ~49 seconds
 
 ```bash
 # Port-forward to Marquez
-oc port-forward -n lineage svc/marquez-web 3000:3000
+oc port-forward -n fkm svc/marquez-web 3000:3000
 
 # Open in browser
 open http://localhost:3000
 ```
 
-Navigate to namespace `lineage` to see:
+Navigate to namespace `fkm` to see:
 - 📊 Complete lineage graph
 - 📁 Dataset dependencies (MinIO → PostgreSQL)
 - 🔄 Job runs and status
@@ -147,7 +147,7 @@ Navigate to namespace `lineage` to see:
 
 ```bash
 # Port-forward to MLflow
-oc port-forward -n lineage svc/mlflow-server 5000:5000
+oc port-forward -n fkm svc/mlflow-server 5000:5000
 
 # Open in browser
 open http://localhost:5000
@@ -161,7 +161,7 @@ Test semantic search over your documents:
 
 ```bash
 # Port-forward PostgreSQL
-oc port-forward -n lineage svc/postgres 5432:5432
+oc port-forward -n fkm svc/postgres 5432:5432
 
 # Run a semantic search
 python -m src.rag.query "What is MLOps?" \
@@ -194,7 +194,7 @@ python -m src.rag.query "What are facets in OpenLineage?"
 
 ### 🔄 Jobs (OpenLineage Event)
 - **Job Name**: `rag_store_vectordb`
-- **Namespace**: `lineage` (auto-injected by Argo controller)
+- **Namespace**: `fkm` (auto-injected by Argo controller)
 - **Run ID**: UUID (e.g., `550e8400-e29b-41d4-a716-446655440000`)
 
 ### 📋 Metadata (OpenLineage Facets)
@@ -248,7 +248,7 @@ chunk_overlap: 400
 
 ```bash
 # Upload to MinIO
-oc port-forward -n lineage svc/mlflow-minio 9000:9000
+oc port-forward -n fkm svc/mlflow-minio 9000:9000
 
 # Use MinIO client or SDK
 mc alias set myminio http://localhost:9000 minioadmin minioadmin123
@@ -267,11 +267,11 @@ Then re-run the pipeline to ingest new documents.
 ### pgvector extension not found
 ```bash
 # Check PostgreSQL image supports pgvector
-oc describe deployment/postgres -n lineage | grep Image
+oc describe deployment/postgres -n fkm | grep Image
 
 # If not, switch to pgvector-enabled image
-oc set image deployment/postgres postgres=ankane/pgvector:latest -n lineage
-oc rollout restart deployment/postgres -n lineage
+oc set image deployment/postgres postgres=ankane/pgvector:latest -n fkm
+oc rollout restart deployment/postgres -n fkm
 
 # Run setup job
 oc apply -f openshift/jobs/00-setup-pgvector.yaml
@@ -280,21 +280,21 @@ oc apply -f openshift/jobs/00-setup-pgvector.yaml
 ### Pipeline step fails
 ```bash
 # Check pod logs
-oc get pods -n lineage | grep rag-doc-ingestion
-oc logs -n lineage <pod-name>
+oc get pods -n fkm | grep rag-doc-ingestion
+oc logs -n fkm <pod-name>
 
 # Check pipeline run details in OpenShift AI UI
 # Or use kubectl/oc:
-oc describe pod <pod-name> -n lineage
+oc describe pod <pod-name> -n fkm
 ```
 
 ### No documents in MinIO
 ```bash
 # Verify documents were uploaded
-oc logs job/rag-seed-docs -n lineage
+oc logs job/rag-seed-docs -n fkm
 
 # Check MinIO bucket
-oc port-forward -n lineage svc/mlflow-minio 9001:9001
+oc port-forward -n fkm svc/mlflow-minio 9001:9001
 open http://localhost:9001  # Login: minioadmin / minioadmin123
 ```
 
