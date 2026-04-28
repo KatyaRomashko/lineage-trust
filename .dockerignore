@@ -4,6 +4,7 @@
 !openlineage-sdk/
 !openlineage-oai/
 !configs/
+!tests/
 !src/
 !data/customers.csv
 !data/sample_docs/

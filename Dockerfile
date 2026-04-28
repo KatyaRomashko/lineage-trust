@@ -13,6 +13,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt && \
     pip3 install --no-cache-dir ./openlineage-oai[mlflow]
 
 COPY configs/ configs/
+COPY tests/ tests/
 COPY src/ src/
 COPY data/customers.csv data/customers.csv
 COPY data/sample_docs/ data/sample_docs/

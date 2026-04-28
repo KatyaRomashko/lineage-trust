@@ -1,0 +1,35 @@
+# Baseline: restrict egress from application pods in fkm (tighten per environment).
+# RHACS network graph should show allowed flows to MLflow, MinIO, Postgres, Redis, Marquez only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fkm-default-egress-restrict
+  namespace: fkm
+  labels:
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - inference-api
+          - mlflow-server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fkm
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - protocol: UDP
+          port: 53

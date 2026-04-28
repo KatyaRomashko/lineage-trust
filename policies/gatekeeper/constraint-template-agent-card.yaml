@@ -1,0 +1,38 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredagentcard
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredAgentCard
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            minDataQualityScore:
+              type: number
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredagentcard
+
+        violation[{"msg": msg}] {
+          input.review.kind == "Pod"
+          pod := input.review.object
+          pod.metadata.namespace == "fkm"
+          not pod.metadata.annotations["agent-card.fkm.io/signature"]
+          msg := "Pod missing agent-card.fkm.io/signature (Cosign bundle ref)"
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind == "Pod"
+          pod := input.review.object
+          pod.metadata.namespace == "fkm"
+          ann := pod.metadata.annotations
+          score := to_number(ann["agent-card.fkm.io/data_quality_score"])
+          min := input.parameters.minDataQualityScore
+          score < min
+          msg := sprintf("data_quality_score %v below minimum %v", [score, min])
+        }

@@ -43,9 +43,31 @@ spec:
               echo "Waiting for marquez:80 ..."
               until bash -c "echo > /dev/tcp/marquez/80" 2>/dev/null; do sleep 2; done
               echo "Marquez is up"
+      volumes:
+        - name: spiffe-workload-api
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true
       containers:
         - name: spark-etl
           image: image-registry.openshift-image-registry.svc:5000/fkm/spark-etl:latest
+          volumeMounts:
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
+          env:
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///spiffe-workload-api/spire-agent.sock
+            - name: SPIFFE_TRUST_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: SPIFFE_TRUST_DOMAIN
+            - name: FKM_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: FKM_REGION
           envFrom:
             - configMapRef:
                 name: fkm-config

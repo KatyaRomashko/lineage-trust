@@ -57,5 +57,10 @@ SPIFFE_REQUIRED = os.getenv("SPIFFE_REQUIRED", "0") == "1"
 PROV_OUTPUT_DIR = os.getenv("PROV_OUTPUT_DIR", "/tmp/prov-o")
 TRANSPARENCY_LOG_PATH = os.getenv("TRANSPARENCY_LOG_PATH", "/tmp/audit/transparency.jsonl")
 REGIONAL_POLICY = os.getenv("REGIONAL_POLICY", "NON_EU")
+FKM_REGION = os.getenv("FKM_REGION", "unset")
+SPIFFE_TRUST_DOMAIN = os.getenv("SPIFFE_TRUST_DOMAIN", "spiffe://fkm.cluster.local")
+FUSEKI_UPDATE_URL = os.getenv("FUSEKI_UPDATE_URL", "")
+PROV_INPUT_RDF = os.getenv("PROV_INPUT_RDF", "")
+PROV_VERIFY_SKIP = os.getenv("PROV_VERIFY_SKIP", "1") == "1"
 LLM_TRACE_ID = os.getenv("LLM_TRACE_ID", "")
 LLM_MONITORING_TOOL = os.getenv("LLM_MONITORING_TOOL", "langsmith")

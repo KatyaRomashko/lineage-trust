@@ -1,0 +1,66 @@
+# Job: run unittest suite for src/security inside the cluster (same image as fkm-app).
+# Apply: oc apply -f openshift/jobs/08-security-tests.yaml
+# Logs:  oc logs -n fkm job/security-tests -f
+# Requires: image fkm-app:latest built in the namespace (oc start-build fkm-app ...).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: security-tests
+  namespace: fkm
+  labels:
+    app.kubernetes.io/part-of: feast-kfp-mlflow
+    stage: "08-security-tests"
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        job: security-tests
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: spiffe-workload-api
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true
+      containers:
+        - name: unittest
+          image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
+          volumeMounts:
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
+          env:
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///spiffe-workload-api/spire-agent.sock
+            - name: SPIFFE_TRUST_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: SPIFFE_TRUST_DOMAIN
+            - name: FKM_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: FKM_REGION
+          envFrom:
+            - configMapRef:
+                name: fkm-config
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              export PYTHONPATH=/app
+              export REKOR_UPLOAD=0
+              export SPIFFE_DEV_IDENTITY_JSON='{"sub":"spiffe://example.org/ns/churn/pipeline-agent"}'
+              cd /app
+              exec python3 -m unittest tests.test_security_stack -v
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

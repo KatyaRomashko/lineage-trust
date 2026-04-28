@@ -25,6 +25,12 @@ spec:
               echo "Waiting for mlflow-server:5000 ..."
               until bash -c "echo > /dev/tcp/mlflow-server/5000" 2>/dev/null; do sleep 2; done
               echo "MLflow is up"
+        - name: prov-input-verify
+          image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
+          command: ["python3", "-m", "src.pipeline.prov_input_verify"]
+          envFrom:
+            - configMapRef:
+                name: fkm-config
       containers:
         - name: pipeline
           image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
@@ -38,6 +44,22 @@ spec:
             - name: feast-config
               mountPath: /app/src/feature_store/feature_store.yaml
               subPath: feature_store.yaml
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
+          env:
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///spiffe-workload-api/spire-agent.sock
+            - name: SPIFFE_TRUST_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: SPIFFE_TRUST_DOMAIN
+            - name: FKM_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: FKM_REGION
           resources:
             requests:
               cpu: 500m
@@ -49,3 +71,7 @@ spec:
         - name: feast-config
           configMap:
             name: feast-config
+        - name: spiffe-workload-api
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true

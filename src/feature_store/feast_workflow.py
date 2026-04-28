@@ -33,6 +33,12 @@ def apply(repo_path: str | None = None) -> None:
     logger.info("Running feast apply on %s", path)
     subprocess.check_call(["feast", "apply"], cwd=path)
     logger.info("feast apply completed")
+    try:
+        from src import spiffe_utils
+
+        spiffe_utils.log_identity_for_lineage()
+    except Exception:
+        pass
 
 
 # ── 2.3  Materialization ────────────────────────────────────────────────
@@ -51,6 +57,12 @@ def materialize(
     logger.info("Materializing features  %s → %s", start.isoformat(), end.isoformat())
     store.materialize(start_date=start, end_date=end)
     logger.info("Materialization complete – online store updated")
+    try:
+        from src import spiffe_utils
+
+        spiffe_utils.log_identity_for_lineage()
+    except Exception:
+        pass
 
 
 # ── 2.4  Training dataset retrieval ─────────────────────────────────────

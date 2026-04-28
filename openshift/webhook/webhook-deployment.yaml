@@ -86,6 +86,8 @@ spec:
               value: "image-registry.openshift-image-registry.svc:5000/fkm/lineage-init-container:latest"
             - name: OPENLINEAGE_URL
               value: "http://marquez"
+            - name: FKM_DEFAULT_REGION
+              value: "us"
             - name: TLS_CERT_FILE
               value: "/etc/webhook/certs/tls.crt"
             - name: TLS_KEY_FILE

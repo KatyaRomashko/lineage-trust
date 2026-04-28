@@ -4,3 +4,4 @@ metadata:
   name: fkm
   labels:
     app.kubernetes.io/part-of: feast-kfp-mlflow
+    # region=us|eu set by openshift/scripts/apply-fkm-region-labels.sh or namespace webhook

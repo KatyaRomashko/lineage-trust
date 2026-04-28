@@ -1,0 +1,14 @@
+# Example Subscription for SPIRE from OperatorHub (community).
+# Verify channel/name with: oc get packagemanifest -n openshift-marketplace | grep -i spire
+# On managed clusters, prefer Red Hat Zero Trust Workload Identity Manager when available.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: spire
+  namespace: openshift-operators
+spec:
+  channel: alpha
+  installPlanApproval: Automatic
+  name: spire
+  source: community-operators
+  sourceNamespace: openshift-marketplace

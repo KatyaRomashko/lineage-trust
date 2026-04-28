@@ -17,6 +17,8 @@ NAMESPACE="fkm"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STAGE="${1:-all}"
+# KFP compile needs `kfp` + `kfp-kubernetes` (provides `kfp.kubernetes`). Prefer Python 3.11–3.12.
+PYTHON_COMPILE="${PYTHON_COMPILE:-$(command -v python3.11 || command -v python3.12 || command -v python3)}"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -80,8 +82,16 @@ upload_pipeline() {
 
     cd "$PROJECT_ROOT"
 
-    info "Compiling pipeline YAML ..."
-    python3 -m src.pipeline.kfp_pipeline
+    info "Compiling pipeline YAML (interpreter: $PYTHON_COMPILE) ..."
+    (cd "$PROJECT_ROOT" && PYTHONPATH="$PROJECT_ROOT" "$PYTHON_COMPILE" -m src.pipeline.kfp_pipeline) \
+        || {
+            err "Compile failed (install: pip install 'kfp>=2.7,<3' 'kfp-kubernetes>=2.7,<3')."
+            if [[ -f "$PROJECT_ROOT/customer_churn_pipeline.yaml" ]]; then
+                warn "Using existing $PROJECT_ROOT/customer_churn_pipeline.yaml"
+            else
+                exit 1
+            fi
+        }
     info "Compiled → customer_churn_pipeline.yaml"
 
     DSP_ROUTE=$(oc get route "ds-pipeline-dspa" -n "$NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null)
@@ -93,7 +103,8 @@ upload_pipeline() {
     fi
 
     info "Uploading pipeline to https://$DSP_ROUTE ..."
-    python3 -c "
+    PYTHON_UPLOAD="${PYTHON_UPLOAD:-$PYTHON_COMPILE}"
+    "$PYTHON_UPLOAD" -c "
 import urllib3, time
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

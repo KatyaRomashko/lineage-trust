@@ -38,6 +38,22 @@ spec:
             - name: feast-config
               mountPath: /app/src/feature_store/feature_store.yaml
               subPath: feature_store.yaml
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
+          env:
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///spiffe-workload-api/spire-agent.sock
+            - name: SPIFFE_TRUST_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: SPIFFE_TRUST_DOMAIN
+            - name: FKM_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: FKM_REGION
           resources:
             requests:
               cpu: 200m
@@ -49,3 +65,7 @@ spec:
         - name: feast-config
           configMap:
             name: feast-config
+        - name: spiffe-workload-api
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true

@@ -15,9 +15,31 @@ spec:
         job: promote-model
     spec:
       restartPolicy: OnFailure
+      volumes:
+        - name: spiffe-workload-api
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true
       containers:
         - name: promote
           image: image-registry.openshift-image-registry.svc:5000/fkm/fkm-app:latest
+          volumeMounts:
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
+          env:
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///spiffe-workload-api/spire-agent.sock
+            - name: SPIFFE_TRUST_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: SPIFFE_TRUST_DOMAIN
+            - name: FKM_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: fkm-config
+                  key: FKM_REGION
           command:
             - python3
             - -c

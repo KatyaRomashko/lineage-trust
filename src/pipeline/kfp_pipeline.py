@@ -50,7 +50,7 @@ def platform_spark_etl(
 
     sec = pipeline_step_guard(
         step_name="platform_spark_etl",
-        activity_label="Spark ETL (MinIO CSV → PostgreSQL warehouse)",
+        activity_label="Spark ETL (MinIO CSV to PostgreSQL warehouse)",
         agent_id=agent_id,
         opa_input=None,
         used_entities=[
@@ -204,7 +204,7 @@ def platform_feast_materialize(
 
     sec = pipeline_step_guard(
         step_name="platform_feast_materialize",
-        activity_label="Feast materialize (offline → online store)",
+        activity_label="Feast materialize (offline to online store)",
         agent_id=agent_id,
         opa_input=None,
         used_entities=[{"label": "warehouse.customer_features"}],
@@ -728,12 +728,10 @@ def ds_model_registration(
     name="Customer Churn ML Pipeline",
     description=(
         "End-to-end churn prediction pipeline. "
-        "PLATFORM steps: Spark ETL, Feast apply & materialize (managed by infra). "
-        "DS steps: data extraction, feature engineering, "
-        "XGBoost training, evaluation, MLflow registration (owned by data scientists). "
+        "PLATFORM: Spark ETL, Feast apply and materialize (infra). "
+        "DS: data extraction, feature engineering, XGBoost training, evaluation, MLflow registration. "
         "OPENLINEAGE_NAMESPACE is injected by the Argo workflow controller. "
-        "Security: PROV-O lineage, SPIFFE/SPIRE JWT authorization, OPA/Rego, "
-        "signed transparency log (optional Rekor), EU date compliance metadata."
+        "Security: PROV-O, SPIFFE/SPIRE JWT, OPA/Rego, transparency log (optional Rekor), EU date metadata."
     ),
 )
 def customer_churn_pipeline(
@@ -863,11 +861,16 @@ def customer_churn_pipeline(
         task.set_env_variable(
             "OPENLINEAGE_PARENT_JOB_NAME", "customer-churn-ml-pipeline",
         )
-        task.set_env_variable("SPIFFE_DEV_IDENTITY_JSON", spiffe_dev_identity_json)
-        task.set_env_variable("OPA_URL", opa_url)
-        task.set_env_variable("OPA_STRICT", "1" if opa_strict else "0")
-        task.set_env_variable("REKOR_UPLOAD", "1" if rekor_upload else "0")
-        task.set_env_variable("SPIFFE_REQUIRED", "1" if spiffe_required else "0")
+        # KFP v2 requires static str values here (not PipelineParameter channels).
+        # Defaults mirror pipeline params; change and recompile if you need other URLs/flags.
+        task.set_env_variable(
+            "SPIFFE_DEV_IDENTITY_JSON",
+            '{"sub": "spiffe://example.org/ns/churn/pipeline-agent"}',
+        )
+        task.set_env_variable("OPA_URL", "http://opa:8181")
+        task.set_env_variable("OPA_STRICT", "1")
+        task.set_env_variable("REKOR_UPLOAD", "0")
+        task.set_env_variable("SPIFFE_REQUIRED", "0")
 
 
 # =======================================================================

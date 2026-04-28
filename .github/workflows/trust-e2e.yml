@@ -1,0 +1,39 @@
+# Deploy to US/EU clusters and run openshift/validate-trust.sh (requires self-hosted runners with oc + kubeconfig).
+name: Trust E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_deploy:
+        description: "Skip deploy; only run repo checks"
+        required: false
+        default: "true"
+
+jobs:
+  unit-prov-spiffe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps (no local feast wheel)
+        run: |
+          pip install 'rdflib>=7' 'spiffe>=0.2' PyJWT cryptography
+      - name: PROV translator smoke
+        run: |
+          python3 -c "from src.prov_translator import openlineage_event_to_graph, graph_to_turtle; e={'run':{'runId':'x'},'job':{'name':'j'},'inputs':[],'outputs':[]}; print(graph_to_turtle(openlineage_event_to_graph(e))[:200])"
+
+  cluster-validate-us-eu:
+    if: github.event.inputs.skip_deploy != 'true'
+    runs-on: [self-hosted, openshift]
+    strategy:
+      matrix:
+        cluster: [us, eu]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate trust (${{ matrix.cluster }})
+        run: |
+          echo "Configure kubeconfig for ${{ matrix.cluster }} runner, then:"
+          NAMESPACE=fkm ./openshift/validate-trust.sh

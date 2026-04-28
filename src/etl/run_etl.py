@@ -47,6 +47,13 @@ def run() -> None:
     # ── Load ─────────────────────────────────────────────────────────────
     load_to_postgres(clean_df, PG_URL, WAREHOUSE_TABLE)
 
+    try:
+        from src import spiffe_utils
+
+        spiffe_utils.log_identity_for_lineage()
+    except Exception:
+        pass
+
     logger.info("═══ STAGE 1 – ETL COMPLETE ═══")
 
 

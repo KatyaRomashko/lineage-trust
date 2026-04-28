@@ -1,0 +1,25 @@
+# Reference SPIRE agent DaemonSet (replicas managed by operator in production).
+# Node selectors and socket paths must match the SPIFFE CSI DaemonSet on your cluster.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent-reference
+  namespace: spire-system
+  labels:
+    app.kubernetes.io/part-of: spire-reference
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent-ref
+  template:
+    metadata:
+      labels:
+        app: spire-agent-ref
+    spec:
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: pause
+          image: registry.access.redhat.com/ubi9/pause:latest
+  updateStrategy:
+    type: RollingUpdate

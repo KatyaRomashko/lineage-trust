@@ -15,6 +15,7 @@ NAMESPACE="fkm"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STAGE="${1:-all}"
+SPIFFE_TRUST_DOMAIN="${SPIFFE_TRUST_DOMAIN:-spiffe://fkm.cluster.local}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -69,6 +70,35 @@ delete_job_if_exists() {
     fi
 }
 
+label_fkm_region_and_config() {
+    if [[ "${SKIP_REGION_LABELS:-0}" == "1" ]]; then
+        warn "SKIP_REGION_LABELS=1 — skipping cluster region detection"
+        return 0
+    fi
+    info "Verifying node topology labels (optional) ..."
+    "$SCRIPT_DIR/scripts/bootstrap-node-labels.sh" || true
+    info "Labeling namespace and fkm-config with detected region ..."
+    SPIFFE_TRUST_DOMAIN="$SPIFFE_TRUST_DOMAIN" \
+        "$SCRIPT_DIR/scripts/apply-fkm-region-labels.sh" || warn "Region labeling failed (continuing)"
+}
+
+cosign_sign_imagestream_tag() {
+    local name=$1 tag=${2:-latest}
+    if [[ "${SKIP_COSIGN_SIGN:-0}" == "1" ]]; then
+        return 0
+    fi
+    if [[ -z "${COSIGN_KEY:-}" ]]; then
+        return 0
+    fi
+    if ! command -v cosign &>/dev/null; then
+        warn "COSIGN_KEY set but cosign not in PATH; skipping sign for $name:$tag"
+        return 0
+    fi
+    local ref="image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/${name}:${tag}"
+    info "Cosign signing $ref ..."
+    COSIGN_EXPERIMENTAL=1 cosign sign --key "${COSIGN_KEY}" -y "$ref" || warn "cosign sign failed for $name"
+}
+
 # ═══════════════════════════════════════════════════════════════════════
 # TEARDOWN
 # ═══════════════════════════════════════════════════════════════════════
@@ -93,6 +123,8 @@ deploy_infra() {
     oc apply -f "$SCRIPT_DIR/base/configmap.yaml"
     oc apply -f "$SCRIPT_DIR/base/feast-config.yaml"
 
+    label_fkm_region_and_config
+
     # Feast postgres PVC
     oc apply -f "$SCRIPT_DIR/base/pvc.yaml"
 
@@ -104,11 +136,13 @@ deploy_infra() {
     if ! oc start-build fkm-app --from-dir="$PROJECT_ROOT" -n "$NAMESPACE" --follow; then
         err "fkm-app build FAILED – aborting"; exit 1
     fi
+    cosign_sign_imagestream_tag fkm-app latest
 
     info "Building spark-etl image ..."
     if ! oc start-build spark-etl --from-dir="$PROJECT_ROOT" -n "$NAMESPACE" --follow; then
         err "spark-etl build FAILED – aborting"; exit 1
     fi
+    cosign_sign_imagestream_tag spark-etl latest
 
     banner "3/6 — Deploy Databases & Storage"
 
@@ -160,12 +194,15 @@ build_images() {
     oc project "$NAMESPACE"
 
     oc apply -f "$SCRIPT_DIR/base/buildconfig.yaml"
+    label_fkm_region_and_config || true
 
     info "Building fkm-app image ..."
     oc start-build fkm-app --from-dir="$PROJECT_ROOT" -n "$NAMESPACE" --follow
+    cosign_sign_imagestream_tag fkm-app latest
 
     info "Building spark-etl image ..."
     oc start-build spark-etl --from-dir="$PROJECT_ROOT" -n "$NAMESPACE" --follow
+    cosign_sign_imagestream_tag spark-etl latest
 
     info "Images built"
 }

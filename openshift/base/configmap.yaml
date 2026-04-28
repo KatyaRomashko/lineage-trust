@@ -41,3 +41,9 @@ data:
   RAW_CSV_OBJECT: "customers.csv"
   MODEL_ROC_AUC_THRESHOLD: "0.70"
   WAREHOUSE_TABLE: "customer_features"
+
+  # ── Trust / SPIFFE / PROV-O (overwritten by openshift/scripts/apply-fkm-region-labels.sh)
+  FKM_REGION: "unset"
+  SPIFFE_TRUST_DOMAIN: "spiffe://fkm.cluster.local"
+  PROV_VERIFY_SKIP: "1"
+  AGENT_CARD_PUBLISH: "0"

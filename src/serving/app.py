@@ -78,6 +78,12 @@ def _init_feast():
 async def lifespan(app: FastAPI):
     """Startup: load model + Feast store; Shutdown: cleanup."""
     logging.basicConfig(level=logging.INFO)
+    try:
+        from src import spiffe_utils
+
+        spiffe_utils.log_identity_for_lineage()
+    except Exception:
+        pass
     _init_feast()
     try:
         _load_model()

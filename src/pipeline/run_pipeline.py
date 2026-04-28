@@ -21,6 +21,7 @@ from configs.settings import (
     PG_URL,
     WAREHOUSE_TABLE,
 )
+from src.pipeline import agent_card_publish
 from src.pipeline.components import (
     data_extraction,
     data_validation,
@@ -29,6 +30,7 @@ from src.pipeline.components import (
     model_registration,
     model_training,
 )
+from src.pipeline.prov_input_verify import verify_or_exit
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 logger = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 def run() -> dict:
     logger.info("═══ STAGE 3 – PIPELINE START ═══")
+    verify_or_exit()
 
     # STEP 1 — Data Extraction via Feast
     df = data_extraction(
@@ -72,6 +75,11 @@ def run() -> dict:
     except Exception:
         logger.exception("STEP 6  Model registration failed (non-fatal)")
         reg_result = {"registered": False, "reason": "error"}
+
+    try:
+        agent_card_publish.publish_agent_card()
+    except Exception:
+        logger.exception("Agent card publish skipped")
 
     logger.info("═══ STAGE 3 – PIPELINE COMPLETE ═══")
     return {"metrics": metrics, "registration": reg_result}

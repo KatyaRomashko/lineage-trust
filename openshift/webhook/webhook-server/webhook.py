@@ -21,12 +21,63 @@ LINEAGE_INIT_IMAGE = os.getenv(
     "image-registry.openshift-image-registry.svc:5000/fkm/lineage-init-container:latest"
 )
 OPENLINEAGE_URL = os.getenv("OPENLINEAGE_URL", "http://marquez")
+# Mutating webhook for Namespace: inject region label (set per cluster on Deployment).
+FKM_DEFAULT_REGION = os.getenv("FKM_DEFAULT_REGION", "us")
 
 
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
     return jsonify({"status": "healthy"}), 200
+
+
+@app.route('/mutate-namespace', methods=['POST'])
+def mutate_namespace():
+    """
+    Inject trust region labels on Namespace CREATE/UPDATE for fkm or part-of=fkm stack.
+    Per-cluster value: set FKM_DEFAULT_REGION on the webhook Deployment to match RHACM labels.
+    """
+    admission_review: dict = {}
+    try:
+        admission_review = request.get_json() or {}
+        admission_request = admission_review.get("request", {})
+        ns = admission_request.get("object", {})
+        name = ns.get("metadata", {}).get("name", "")
+        labels = ns.get("metadata", {}).get("labels") or {}
+
+        if name != "fkm" and labels.get("app.kubernetes.io/part-of") != "feast-kfp-mlflow":
+            return create_admission_response(admission_review, allowed=True, patch=None)
+
+        if labels.get("region") and labels.get("trust.fkm.io/region"):
+            return create_admission_response(admission_review, allowed=True, patch=None)
+
+        patch = []
+        if not labels:
+            patch.append({
+                "op": "add",
+                "path": "/metadata/labels",
+                "value": {
+                    "region": FKM_DEFAULT_REGION,
+                    "trust.fkm.io/region": FKM_DEFAULT_REGION,
+                },
+            })
+        else:
+            if not labels.get("region"):
+                patch.append({"op": "add", "path": "/metadata/labels/region", "value": FKM_DEFAULT_REGION})
+            if not labels.get("trust.fkm.io/region"):
+                patch.append({
+                    "op": "add",
+                    "path": "/metadata/labels/trust.fkm.io~1region",
+                    "value": FKM_DEFAULT_REGION,
+                })
+        return create_admission_response(admission_review, allowed=True, patch=patch)
+    except Exception as e:
+        logger.error("mutate-namespace error: %s", e, exc_info=True)
+        return create_admission_response(
+            admission_review if admission_review else {},
+            allowed=False,
+            status={"message": str(e)},
+        )
 
 
 @app.route('/mutate', methods=['POST'])

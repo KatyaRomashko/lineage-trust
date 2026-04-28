@@ -1,0 +1,12 @@
+# Registers the SPIFFE CSI driver name used in openshift/jobs and openshift/base workloads.
+# Skip if your SPIRE / ZT operator already created this CSIDriver.
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: csi.spiffe.io
+spec:
+  attachRequired: false
+  podInfoOnMount: true
+  fsGroupPolicy: ReadWriteOnceWithFSType
+  volumeLifecycleModes:
+    - Ephemeral

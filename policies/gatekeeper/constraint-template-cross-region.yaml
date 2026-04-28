@@ -1,0 +1,31 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sregionmatchinventory
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRegionMatchInventory
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            destinationRegion:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sregionmatchinventory
+
+        # Example: deny Pod if its namespace region label mismatches declared destination.
+        # Extend with data.inventory from Gatekeeper sync for remote Service/Route checks.
+        violation[{"msg": msg}] {
+          input.review.kind == "Pod"
+          pod := input.review.object
+          pod.metadata.namespace == "fkm"
+          ns_region := input.review.object.metadata.labels["region"]
+          want := input.parameters.destinationRegion
+          ns_region != want
+          msg := sprintf("Pod region label %v != required %v", [ns_region, want])
+        }

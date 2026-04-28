@@ -1,0 +1,44 @@
+# Reference-only SPIRE server fragments. Prefer the operator-managed SPIRE server CR.
+# Tune trust_domain and federation to match openshift/scripts/apply-fkm-region-labels.sh (SPIFFE_TRUST_DOMAIN).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server-reference
+  namespace: spire-server
+  labels:
+    app.kubernetes.io/part-of: spire-reference
+data:
+  server.conf: |
+    server {
+      trust_domain = "fkm.cluster.local"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      federation {
+        bundle_endpoint {
+          address = "0.0.0.0"
+          port = 8443
+        }
+      }
+    }
+---
+# Example StatefulSet — do not apply alongside an operator-managed server without deduplication.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server-reference
+  namespace: spire-server
+  labels:
+    app.kubernetes.io/part-of: spire-reference
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: spire-server-ref
+  template:
+    metadata:
+      labels:
+        app: spire-server-ref
+    spec:
+      containers:
+        - name: pause
+          image: registry.access.redhat.com/ubi9/pause:latest
